@@ -877,67 +877,217 @@ export default function AdminLeaguesPage() {
                 <p className="text-xs text-gray-400 mt-0.5">Acompanhe as fases eliminatórias do torneio.</p>
               </div>
 
-              {/* Tabela de Jogos da Copa */}
-              <div className="max-h-[600px] overflow-y-auto space-y-6 pr-2 scrollbar-thin">
-                {Object.entries(
-                  cupMatches.reduce((groups, match) => {
-                    const phase = match.round_number;
-                    if (!groups[phase]) groups[phase] = [];
-                    groups[phase].push(match);
-                    return groups;
-                  }, {})
-                )
-                  .sort(([a], [b]) => parseInt(a) - parseInt(b))
-                  .map(([phase, matches]) => {
-                    const phaseInt = parseInt(phase);
-                    const phaseName = phaseInt === 1 ? "Quartas de Final" : phaseInt === 2 ? "Semifinais" : "Grande Final";
-                    const allConfirmed = matches.every(m => m.status === "confirmed");
-                    
-                    return (
-                      <div key={phase} className="space-y-3">
-                        <div className="flex justify-between items-center bg-white/5 px-4 py-2 rounded-xl border border-white/5">
-                          <h3 className="text-xs font-bold text-gray-200 uppercase tracking-wider">
-                            {phaseName} ({matches.length} jogo{matches.length > 1 ? "s" : ""})
-                          </h3>
-                          {allConfirmed && phaseInt < 3 && (
-                            <button
-                              onClick={() => handleGenerateNextCupPhase(phaseInt)}
-                              className="px-3 py-1 rounded-lg text-[10px] font-bold bg-[#10b981] hover:bg-emerald-600 text-white transition-all shadow"
-                            >
-                              🎲 Sortear Próxima Fase ({phaseInt === 1 ? "Semifinais" : "Final"})
-                            </button>
-                          )}
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {matches.map((m) => (
+              {/* Bracket Visual da Copa */}
+              <div className="overflow-x-auto pb-4 pt-2">
+                <div className="flex flex-row justify-center items-center gap-12 min-w-[800px] py-4">
+                  {/* Quartas de Final */}
+                  {cupMatches.some(m => m.round_number === 1) && (
+                    <div className="flex flex-col justify-between gap-6 h-[520px] w-[260px]">
+                      <div className="text-center text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-white/5 pb-2 flex flex-col items-center gap-2">
+                        <span>Quartas de Final</span>
+                        {cupMatches.filter(m => m.round_number === 1).every(m => m.status === "confirmed") && (
+                          <button
+                            onClick={() => handleGenerateNextCupPhase(1)}
+                            className="px-3 py-1 rounded-lg text-[9px] font-bold bg-[#10b981] hover:bg-emerald-600 text-white transition-all shadow"
+                          >
+                            🎲 Sortear Semifinais
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex flex-col justify-between h-full py-4 gap-4">
+                        {cupMatches.filter(m => m.round_number === 1).map((m) => {
+                          const isHomeWinner = m.status === "confirmed" && m.home_score > m.away_score;
+                          const isAwayWinner = m.status === "confirmed" && m.away_score > m.home_score;
+                          return (
                             <div
                               key={m.id}
-                              className="p-4 rounded-xl bg-[#0d1527]/50 border border-white/5 flex justify-between items-center gap-3 relative overflow-hidden"
+                              className="p-3 rounded-xl bg-[#0b0f19] border border-white/5 hover:border-[#10b981]/30 transition-all flex flex-col gap-2 relative overflow-hidden shadow-lg shadow-black/20"
                             >
-                              <div className="flex-1 text-right truncate font-medium text-sm text-gray-200">
-                                {m.home_team?.name}
-                              </div>
-                              <div className="flex flex-col items-center justify-center bg-[#060913] border border-white/10 px-3 py-1.5 rounded-lg text-xs font-bold min-w-[70px] text-emerald-400 shadow-inner">
-                                {m.status === "confirmed" ? (
-                                  <span>
-                                    {m.home_score} - {m.away_score}
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 truncate">
+                                  {m.home_team?.badge_url ? (
+                                    <img src={m.home_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                  ) : (
+                                    <span className="text-xs">🛡️</span>
+                                  )}
+                                  <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isHomeWinner ? "text-gray-500" : "text-gray-200"}`}>
+                                    {m.home_team?.name || "A definir"}
                                   </span>
-                                ) : m.status === "dispute" ? (
-                                  <span className="text-red-400 animate-pulse">DISPUTA</span>
+                                </div>
+                                {m.status === "confirmed" ? (
+                                  <span className={`text-xs font-extrabold ${isHomeWinner ? "text-emerald-400" : "text-gray-500"}`}>
+                                    {m.home_score}
+                                  </span>
                                 ) : (
-                                  <span className="text-gray-500 text-[10px]">PENDENTE</span>
+                                  <span className="text-[10px] text-gray-600 font-bold">-</span>
                                 )}
                               </div>
-                              <div className="flex-1 text-left truncate font-medium text-sm text-gray-200">
-                                {m.away_team?.name}
+                              <div className="border-t border-white/5 my-0.5"></div>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 truncate">
+                                  {m.away_team?.badge_url ? (
+                                    <img src={m.away_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                  ) : (
+                                    <span className="text-xs">🛡️</span>
+                                  )}
+                                  <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isAwayWinner ? "text-gray-500" : "text-gray-200"}`}>
+                                    {m.away_team?.name || "A definir"}
+                                  </span>
+                                </div>
+                                {m.status === "confirmed" ? (
+                                  <span className={`text-xs font-extrabold ${isAwayWinner ? "text-emerald-400" : "text-gray-500"}`}>
+                                    {m.away_score}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-gray-600 font-bold">-</span>
+                                )}
                               </div>
+                              {m.status === "pending" && <div className="absolute top-0 right-0 h-1 w-full bg-blue-500/30"></div>}
+                              {m.status === "dispute" && <div className="absolute top-0 right-0 h-1 w-full bg-red-500 animate-pulse"></div>}
+                              {m.status === "confirmed" && <div className="absolute top-0 right-0 h-1 w-full bg-emerald-500/50"></div>}
                             </div>
-                          ))}
-                        </div>
+                          );
+                        })}
                       </div>
-                    );
-                  })}
+                    </div>
+                  )}
+
+                  {/* Semifinais */}
+                  {cupMatches.some(m => m.round_number === 2) && (
+                    <div className="flex flex-col justify-between gap-6 h-[520px] w-[260px]">
+                      <div className="text-center text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-white/5 pb-2 flex flex-col items-center gap-2">
+                        <span>Semifinais</span>
+                        {cupMatches.filter(m => m.round_number === 2).every(m => m.status === "confirmed") && (
+                          <button
+                            onClick={() => handleGenerateNextCupPhase(2)}
+                            className="px-3 py-1 rounded-lg text-[9px] font-bold bg-[#10b981] hover:bg-emerald-600 text-white transition-all shadow"
+                          >
+                            🎲 Sortear Final
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex flex-col justify-around h-full py-8 gap-8">
+                        {cupMatches.filter(m => m.round_number === 2).map((m) => {
+                          const isHomeWinner = m.status === "confirmed" && m.home_score > m.away_score;
+                          const isAwayWinner = m.status === "confirmed" && m.away_score > m.home_score;
+                          return (
+                            <div
+                              key={m.id}
+                              className="p-3 rounded-xl bg-[#0b0f19] border border-white/5 hover:border-[#10b981]/30 transition-all flex flex-col gap-2 relative overflow-hidden shadow-lg shadow-black/20"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 truncate">
+                                  {m.home_team?.badge_url ? (
+                                    <img src={m.home_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                  ) : (
+                                    <span className="text-xs">🛡️</span>
+                                  )}
+                                  <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isHomeWinner ? "text-gray-500" : "text-gray-200"}`}>
+                                    {m.home_team?.name || "A definir"}
+                                  </span>
+                                </div>
+                                {m.status === "confirmed" ? (
+                                  <span className={`text-xs font-extrabold ${isHomeWinner ? "text-emerald-400" : "text-gray-500"}`}>
+                                    {m.home_score}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-gray-600 font-bold">-</span>
+                                )}
+                              </div>
+                              <div className="border-t border-white/5 my-0.5"></div>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 truncate">
+                                  {m.away_team?.badge_url ? (
+                                    <img src={m.away_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                  ) : (
+                                    <span className="text-xs">🛡️</span>
+                                  )}
+                                  <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isAwayWinner ? "text-gray-500" : "text-gray-200"}`}>
+                                    {m.away_team?.name || "A definir"}
+                                  </span>
+                                </div>
+                                {m.status === "confirmed" ? (
+                                  <span className={`text-xs font-extrabold ${isAwayWinner ? "text-emerald-400" : "text-gray-500"}`}>
+                                    {m.away_score}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-gray-600 font-bold">-</span>
+                                )}
+                              </div>
+                              {m.status === "pending" && <div className="absolute top-0 right-0 h-1 w-full bg-blue-500/30"></div>}
+                              {m.status === "dispute" && <div className="absolute top-0 right-0 h-1 w-full bg-red-500 animate-pulse"></div>}
+                              {m.status === "confirmed" && <div className="absolute top-0 right-0 h-1 w-full bg-emerald-500/50"></div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Grande Final */}
+                  {cupMatches.some(m => m.round_number === 3) && (
+                    <div className="flex flex-col justify-between gap-6 h-[520px] w-[260px]">
+                      <div className="text-center text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-white/5 pb-2">
+                        Grande Final
+                      </div>
+                      <div className="flex flex-col justify-center h-full">
+                        {cupMatches.filter(m => m.round_number === 3).map((m) => {
+                          const isHomeWinner = m.status === "confirmed" && m.home_score > m.away_score;
+                          const isAwayWinner = m.status === "confirmed" && m.away_score > m.home_score;
+                          return (
+                            <div
+                              key={m.id}
+                              className="p-3 rounded-xl bg-gradient-to-br from-[#1b233a] to-[#0b0f19] border border-amber-500/30 hover:border-amber-500/50 transition-all flex flex-col gap-2 relative overflow-hidden shadow-xl shadow-amber-500/5"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 truncate">
+                                  {m.home_team?.badge_url ? (
+                                    <img src={m.home_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                  ) : (
+                                    <span className="text-xs">🛡️</span>
+                                  )}
+                                  <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isHomeWinner ? "text-gray-500" : "text-gray-200"}`}>
+                                    {m.home_team?.name || "A definir"}
+                                  </span>
+                                </div>
+                                {m.status === "confirmed" ? (
+                                  <span className={`text-xs font-extrabold ${isHomeWinner ? "text-amber-400" : "text-gray-500"}`}>
+                                    {m.home_score}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-gray-600 font-bold">-</span>
+                                )}
+                              </div>
+                              <div className="border-t border-white/5 my-0.5"></div>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 truncate">
+                                  {m.away_team?.badge_url ? (
+                                    <img src={m.away_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                  ) : (
+                                    <span className="text-xs">🛡️</span>
+                                  )}
+                                  <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isAwayWinner ? "text-gray-500" : "text-gray-200"}`}>
+                                    {m.away_team?.name || "A definir"}
+                                  </span>
+                                </div>
+                                {m.status === "confirmed" ? (
+                                  <span className={`text-xs font-extrabold ${isAwayWinner ? "text-amber-400" : "text-gray-500"}`}>
+                                    {m.away_score}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-gray-600 font-bold">-</span>
+                                )}
+                              </div>
+                              {m.status === "pending" && <div className="absolute top-0 right-0 h-1 w-full bg-amber-500/30"></div>}
+                              {m.status === "dispute" && <div className="absolute top-0 right-0 h-1 w-full bg-red-500 animate-pulse"></div>}
+                              {m.status === "confirmed" && <div className="absolute top-0 right-0 h-1 w-full bg-amber-500"></div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ) : (

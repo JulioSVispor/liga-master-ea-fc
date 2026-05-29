@@ -13,41 +13,80 @@ export default function UserDashboardLayout({ children }) {
   const [team, setTeam] = useState(null);
   const [wageSum, setWageSum] = useState(0);
 
+  // Estados de Notificações (Fase 4)
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  // Buscar notificações do usuário
+  const loadNotifications = async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(15);
+      
+      if (error) throw error;
+      setNotifications(data || []);
+    } catch (err) {
+      console.error("Erro ao carregar notificações:", err);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    if (!userProfile) return;
+    try {
+      const { error } = await supabase
+        .from("notifications")
+        .update({ read: true })
+        .eq("user_id", userProfile.id);
+      
+      if (error) throw error;
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } catch (err) {
+      console.error("Erro ao marcar lidas:", err);
+    }
+  };
+
   useEffect(() => {
     async function loadData() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-
+ 
         if (!session) {
           router.push("/login");
           return;
         }
-
+ 
         // Carregar Perfil
         const { data: profile } = await supabase
           .from("profiles")
           .select("*")
           .eq("id", session.user.id)
           .single();
-
+ 
         setUserProfile(profile);
-
+        if (profile) {
+          await loadNotifications(profile.id);
+        }
+ 
         // Carregar Time
         const { data: teamData } = await supabase
           .from("teams")
           .select("*")
           .eq("user_id", session.user.id)
           .single();
-
+ 
         if (teamData) {
           setTeam(teamData);
-
+ 
           // Calcular soma dos salários do elenco do time
           const { data: players } = await supabase
             .from("players")
             .select("wage")
             .eq("team_id", teamData.id);
-
+ 
           const totalWages = players ? players.reduce((sum, p) => sum + parseFloat(p.wage || 0), 0) : 0;
           setWageSum(totalWages);
         }
@@ -57,9 +96,20 @@ export default function UserDashboardLayout({ children }) {
         setLoading(false);
       }
     }
-
+ 
     loadData();
-  }, [router, pathname]); // Recarregar finanças ao mudar de página para manter atualizado
+  }, [router, pathname]);
+
+  // Polling para Notificações
+  useEffect(() => {
+    if (!userProfile) return;
+    
+    const interval = setInterval(() => {
+      loadNotifications(userProfile.id);
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [userProfile]); // Recarregar finanças ao mudar de página para manter atualizado
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -89,23 +139,75 @@ export default function UserDashboardLayout({ children }) {
 
   // Calcular porcentagem do teto de salários
   const wageCapPercent = team ? Math.min(Math.round((wageSum / parseFloat(team.max_wage_cap)) * 100), 100) : 0;
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
     <div className="flex min-h-screen bg-[#060913] text-gray-100">
       {/* Sidebar */}
       <aside className="w-68 border-r border-white/5 bg-[#090d16]/80 backdrop-blur-md hidden lg:flex flex-col">
-        <div className="h-16 flex items-center px-6 border-b border-white/5 justify-between">
-          <Link href="/" className="text-xl font-bold bg-gradient-to-r from-[#10b981] to-[#3b82f6] bg-clip-text text-transparent">
+        <div className="h-16 flex items-center px-6 border-b border-white/5 justify-between gap-1">
+          <Link href="/" className="text-base font-bold bg-gradient-to-r from-[#10b981] to-[#3b82f6] bg-clip-text text-transparent">
             LIGA MASTER
           </Link>
-          {userProfile?.role === "admin" && (
-            <Link
-              href="/admin"
-              className="text-[10px] uppercase font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20"
-            >
-              Admin
-            </Link>
-          )}
+          
+          <div className="flex items-center gap-2">
+            {/* Sininho de Notificações Desktop */}
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="relative p-1.5 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all text-xs flex items-center justify-center"
+              >
+                🔔
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-red-500 text-[8px] font-bold text-white flex items-center justify-center">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+              
+              {showNotifications && (
+                <div className="absolute left-0 mt-2 w-72 rounded-xl border border-white/10 bg-[#090d16]/95 backdrop-blur-md shadow-2xl p-3 z-50 text-left">
+                  <div className="flex justify-between items-center border-b border-white/5 pb-2 mb-2">
+                    <span className="text-[10px] font-bold text-white">Notificações</span>
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={handleMarkAllRead}
+                        className="text-[8.5px] text-[#10b981] hover:text-[#059669] font-bold"
+                      >
+                        Lidas
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1 scrollbar-thin">
+                    {notifications.length === 0 ? (
+                      <p className="text-[9px] text-gray-500 text-center py-3">Sem notificações.</p>
+                    ) : (
+                      notifications.map(n => (
+                        <div
+                          key={n.id}
+                          className={`p-2 rounded-lg border text-[10px] ${
+                            n.read ? "bg-white/[0.01] border-white/5 opacity-60" : "bg-[#10b981]/5 border-[#10b981]/15"
+                          }`}
+                        >
+                          <p className="font-bold text-white text-[10.5px] leading-tight mb-0.5">{n.title}</p>
+                          <p className="text-gray-400 leading-tight">{n.content}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {userProfile?.role === "admin" && (
+              <Link
+                href="/admin"
+                className="text-[9px] uppercase font-bold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/20"
+              >
+                Admin
+              </Link>
+            )}
+          </div>
         </div>
 
         {/* Informações do Time & Finanças */}
@@ -173,6 +275,15 @@ export default function UserDashboardLayout({ children }) {
               </Link>
             );
           })}
+          {userProfile?.role === "admin" && (
+            <Link
+              href="/admin"
+              className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all text-amber-400 hover:bg-amber-400/10 border border-transparent hover:border-amber-400/20"
+            >
+              <span>👑</span>
+              Painel Admin
+            </Link>
+          )}
         </nav>
 
         {/* Logout */}
@@ -194,7 +305,55 @@ export default function UserDashboardLayout({ children }) {
           <span className="text-lg font-bold bg-gradient-to-r from-[#10b981] to-[#3b82f6] bg-clip-text text-transparent">
             LIGA MASTER
           </span>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            {/* Sininho de Notificações Mobile */}
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="relative p-1.5 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all text-xs flex items-center justify-center"
+              >
+                🔔
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-red-500 text-[8px] font-bold text-white flex items-center justify-center">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+              
+              {showNotifications && (
+                <div className="absolute right-0 mt-2 w-72 rounded-xl border border-white/10 bg-[#090d16]/95 backdrop-blur-md shadow-2xl p-3 z-50 text-left">
+                  <div className="flex justify-between items-center border-b border-white/5 pb-2 mb-2">
+                    <span className="text-[10px] font-bold text-white">Notificações</span>
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={handleMarkAllRead}
+                        className="text-[8.5px] text-[#10b981] hover:text-[#059669] font-bold"
+                      >
+                        Lidas
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1 scrollbar-thin">
+                    {notifications.length === 0 ? (
+                      <p className="text-[9px] text-gray-500 text-center py-3">Sem notificações.</p>
+                    ) : (
+                      notifications.map(n => (
+                        <div
+                          key={n.id}
+                          className={`p-2 rounded-lg border text-[10px] ${
+                            n.read ? "bg-white/[0.01] border-white/5 opacity-60" : "bg-[#10b981]/5 border-[#10b981]/15"
+                          }`}
+                        >
+                          <p className="font-bold text-white text-[10.5px] leading-tight mb-0.5">{n.title}</p>
+                          <p className="text-gray-400 leading-tight">{n.content}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {team && (
               <span className="text-xs font-bold text-emerald-400 bg-emerald-400/10 px-2.5 py-1 rounded-full">
                 R$ {(team.budget / 1e6).toFixed(1)}M
@@ -226,6 +385,15 @@ export default function UserDashboardLayout({ children }) {
               </Link>
             );
           })}
+          {userProfile?.role === "admin" && (
+            <Link
+              href="/admin"
+              className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-amber-400 bg-amber-400/10 border border-amber-400/20"
+            >
+              <span>👑</span>
+              Admin
+            </Link>
+          )}
         </div>
 
         {/* Conteúdo Dinâmico */}

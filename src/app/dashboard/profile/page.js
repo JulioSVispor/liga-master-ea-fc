@@ -21,6 +21,9 @@ export default function ProfilePage() {
   const [teamName, setTeamName] = useState("");
   const [realClubName, setRealClubName] = useState("");
   const [formation, setFormation] = useState("4-3-3");
+  const [badgeUrl, setBadgeUrl] = useState("");
+  const [uniformUrl, setUniformUrl] = useState("");
+  const [achievements, setAchievements] = useState([]);
 
   useEffect(() => {
     async function loadUserData() {
@@ -54,6 +57,19 @@ export default function ProfilePage() {
           setTeamName(teamData.name || "");
           setRealClubName(teamData.real_club_name || "");
           setFormation(teamData.formation || "4-3-3");
+          setBadgeUrl(teamData.badge_url || "");
+          setUniformUrl(teamData.uniform_url || "");
+
+          // Load achievements
+          const { data: achievementsData } = await supabase
+            .from("achievements")
+            .select("*")
+            .eq("team_id", teamData.id)
+            .order("created_at", { ascending: false });
+
+          if (achievementsData) {
+            setAchievements(achievementsData);
+          }
         }
       } catch (err) {
         console.error("Erro ao carregar dados do usuário:", err);
@@ -135,13 +151,15 @@ export default function ProfilePage() {
           name: teamName,
           real_club_name: realClubName,
           formation: formation,
+          badge_url: badgeUrl,
+          uniform_url: uniformUrl,
         })
         .eq("id", team.id);
 
       if (error) throw error;
       
       // Update local team state to reflect changes
-      setTeam({ ...team, name: teamName, real_club_name: realClubName, formation: formation });
+      setTeam({ ...team, name: teamName, real_club_name: realClubName, formation: formation, badge_url: badgeUrl, uniform_url: uniformUrl });
       showMessage("Informações do time atualizadas com sucesso!");
     } catch (err) {
       showMessage(err.message || "Erro ao atualizar time.", "error");
@@ -215,6 +233,16 @@ export default function ProfilePage() {
           }`}
         >
           <span>🛡️</span> Meu Time
+        </button>
+        <button
+          onClick={() => setActiveTab("achievements")}
+          className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+            activeTab === "achievements"
+              ? "border-[#10b981] text-[#10b981]"
+              : "border-transparent text-gray-400 hover:text-white hover:border-white/10"
+          }`}
+        >
+          <span>🏆</span> Conquistas & Títulos
         </button>
       </div>
 
@@ -375,7 +403,54 @@ export default function ProfilePage() {
                       <option value="5-2-1-2" className="bg-[#090d16] text-white">5-2-1-2</option>
                     </select>
                   </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-gray-300">URL do Escudo (Badge)</label>
+                    <input
+                      type="url"
+                      value={badgeUrl}
+                      onChange={(e) => setBadgeUrl(e.target.value)}
+                      placeholder="https://exemplo.com/escudo.png"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-[#10b981] transition-colors"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-gray-300">URL do Uniforme (Jersey)</label>
+                    <input
+                      type="url"
+                      value={uniformUrl}
+                      onChange={(e) => setUniformUrl(e.target.value)}
+                      placeholder="https://exemplo.com/uniforme.png"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-[#10b981] transition-colors"
+                    />
+                  </div>
                 </div>
+
+                {/* Preview de Escudo e Uniforme */}
+                {(badgeUrl || uniformUrl) && (
+                  <div className="mt-6 p-4 rounded-xl border border-white/5 bg-white/[0.02] space-y-3">
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Pré-visualização de Identidade</h3>
+                    <div className="flex gap-6 items-center">
+                      {badgeUrl && (
+                        <div className="flex flex-col items-center gap-1.5">
+                          <span className="text-[10px] text-gray-500 font-semibold">Escudo</span>
+                          <div className="w-16 h-16 rounded-xl bg-black/20 flex items-center justify-center border border-white/5 overflow-hidden p-2">
+                            <img src={badgeUrl} alt="Escudo Time" className="max-w-full max-h-full object-contain" onError={(e) => e.target.style.display = 'none'} />
+                          </div>
+                        </div>
+                      )}
+                      {uniformUrl && (
+                        <div className="flex flex-col items-center gap-1.5">
+                          <span className="text-[10px] text-gray-500 font-semibold">Uniforme</span>
+                          <div className="w-16 h-16 rounded-xl bg-black/20 flex items-center justify-center border border-white/5 overflow-hidden p-2">
+                            <img src={uniformUrl} alt="Uniforme Time" className="max-w-full max-h-full object-contain" onError={(e) => e.target.style.display = 'none'} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex justify-end pt-4">
                   <button
@@ -389,6 +464,52 @@ export default function ProfilePage() {
               </>
             )}
           </form>
+        )}
+
+        {activeTab === "achievements" && (
+          <div className="space-y-6">
+            <div className="border-b border-white/5 pb-4">
+              <h2 className="text-lg font-bold text-white">Galeria de Conquistas & Títulos</h2>
+              <p className="text-xs text-gray-400">Os momentos gloriosos e taças levantadas pelo seu clube na história da liga.</p>
+            </div>
+
+            {!team ? (
+              <div className="text-center py-10">
+                <span className="text-3xl block mb-2">⚠️</span>
+                <p className="text-sm text-gray-400">Você ainda não tem um time associado à sua conta.</p>
+              </div>
+            ) : achievements.length === 0 ? (
+              <div className="text-center py-12 rounded-xl border border-dashed border-white/10 bg-white/[0.01]">
+                <span className="text-4xl block mb-3">🏆</span>
+                <h3 className="text-sm font-bold text-white mb-1">Nenhum título conquistado ainda</h3>
+                <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                  Sua sala de troféus está vazia. Entre em campo, lidere seu time e conquiste a glória eterna na Liga Master!
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {achievements.map((achievement) => (
+                  <div
+                    key={achievement.id}
+                    className="p-4 rounded-xl border border-white/5 bg-gradient-to-br from-white/[0.03] to-white/[0.01] hover:border-emerald-500/20 transition-all group flex items-start gap-4"
+                  >
+                    <div className="w-12 h-12 rounded-lg bg-emerald-500/10 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                      {achievement.icon || "🏆"}
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">
+                        {achievement.title}
+                      </h4>
+                      <p className="text-xs text-gray-400">{achievement.season_name}</p>
+                      <p className="text-[10px] text-gray-500">
+                        {new Date(achievement.created_at).toLocaleDateString("pt-BR")}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

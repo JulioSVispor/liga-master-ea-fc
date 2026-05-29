@@ -18,6 +18,13 @@ export default function Scouting() {
   const [actionLoading, setActionLoading] = useState(null); // Armazena o ID do jogador em ação
   const [importId, setImportId] = useState("");
   const [importing, setImporting] = useState(false);
+
+  // Estados para Modal de Empréstimo (Fase 2)
+  const [showLoanModal, setShowLoanModal] = useState(false);
+  const [selectedLoanPlayer, setSelectedLoanPlayer] = useState(null);
+  const [loanSalaryPct, setLoanSalaryPct] = useState(50);
+  const [loanDuration, setLoanDuration] = useState(4);
+  const [loanSubmitting, setLoanSubmitting] = useState(false);
   
   // Paginação
   const [page, setPage] = useState(1);
@@ -53,7 +60,7 @@ export default function Scouting() {
       try {
         let query = supabase
           .from("players")
-          .select("*, teams(name)", { count: "exact" });
+          .select("*, teams!team_id(name)", { count: "exact" });
 
         // Aplicar Filtro de Busca por Nome
         if (search) {
@@ -173,6 +180,98 @@ export default function Scouting() {
       alert("Erro ao conectar à API de sincronização: " + err.message);
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  // Pagar Multa Rescisória (Fase 2)
+  const handleBuyout = async (player) => {
+    if (!myTeam) {
+      alert("Erro: Você precisa ter um time registrado para contratar jogadores.");
+      return;
+    }
+
+    const buyoutPrice = player.buyout_clause && player.buyout_clause > 0
+      ? parseFloat(player.buyout_clause)
+      : parseFloat(player.value) * 1.5;
+
+    const confirmBuy = window.confirm(
+      `Deseja pagar a Multa Rescisória de ${player.name} no valor de R$ ${buyoutPrice.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}? \n\nO jogador será transferido instantaneamente para seu time sem necessidade de aprovação do outro técnico!`
+    );
+
+    if (!confirmBuy) return;
+
+    setActionLoading(player.id);
+    try {
+      const { data, error } = await supabase.rpc("buy_player_via_buyout", {
+        p_player_id: player.id,
+        p_buyer_team_id: myTeam.id
+      });
+
+      if (error) throw error;
+
+      if (data && data.success) {
+        alert(data.message);
+
+        setMyTeam((prev) => ({
+          ...prev,
+          budget: prev.budget - buyoutPrice,
+        }));
+
+        setPlayers((prev) =>
+          prev.map((p) =>
+            p.id === player.id
+              ? { ...p, team_id: myTeam.id, teams: { name: myTeam.name } }
+              : p
+          )
+        );
+      } else {
+        alert(data.message || "Erro ao processar pagamento de multa.");
+      }
+    } catch (err) {
+      alert("Erro: " + err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Abrir Modal de Empréstimo
+  const handleOpenLoanModal = (player) => {
+    setSelectedLoanPlayer(player);
+    setLoanSalaryPct(50);
+    setLoanDuration(4);
+    setShowLoanModal(true);
+  };
+
+  // Enviar proposta de Empréstimo
+  const handleSendLoanOffer = async () => {
+    if (!myTeam || !selectedLoanPlayer) return;
+
+    setLoanSubmitting(true);
+    try {
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 2); // Oferta expira em 2 dias
+
+      const { error } = await supabase
+        .from("loan_offers")
+        .insert({
+          sender_team_id: myTeam.id,
+          receiver_team_id: selectedLoanPlayer.team_id,
+          player_id: selectedLoanPlayer.id,
+          salary_share_pct: parseInt(loanSalaryPct),
+          duration_weeks: parseInt(loanDuration),
+          status: "pending",
+          expires_at: expiresAt.toISOString()
+        });
+
+      if (error) throw error;
+
+      alert(`Proposta de empréstimo enviada com sucesso para o ${selectedLoanPlayer.teams?.name}!`);
+      setShowLoanModal(false);
+      setSelectedLoanPlayer(null);
+    } catch (err) {
+      alert("Erro ao enviar proposta de empréstimo: " + err.message);
+    } finally {
+      setLoanSubmitting(false);
     }
   };
 
@@ -444,15 +543,34 @@ export default function Scouting() {
                         No seu Elenco
                       </button>
                     ) : (
-                      <button
-                        onClick={() => {
-                          alert("Você será redirecionado para a Central de Trocas para negociar este jogador!");
-                          window.location.href = "/dashboard/market";
-                        }}
-                        className="w-full rounded-xl bg-[#3b82f6]/10 hover:bg-[#3b82f6]/20 border border-[#3b82f6]/20 py-2.5 text-xs font-bold text-[#3b82f6] transition-all hover:scale-[1.02]"
-                      >
-                        Propor Troca
-                      </button>
+                      <div className="space-y-2">
+                        <div className="text-[10px] text-center text-gray-400">
+                          Multa Rescisória: <strong className="text-red-400">R$ {((player.buyout_clause && player.buyout_clause > 0 ? player.buyout_clause : player.value * 1.5) / 1000).toFixed(0)}k</strong>
+                        </div>
+                        <button
+                          onClick={() => handleBuyout(player)}
+                          disabled={actionLoading !== null}
+                          className="w-full rounded-xl bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 py-2 text-xs font-bold text-white shadow transition-all hover:scale-[1.01]"
+                        >
+                          💸 Pagar Multa (Roubar)
+                        </button>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={() => handleOpenLoanModal(player)}
+                            className="rounded-xl bg-[#3b82f6]/10 hover:bg-[#3b82f6]/20 border border-[#3b82f6]/20 py-2 text-xs font-bold text-[#3b82f6] transition-all text-center"
+                          >
+                            🤝 Empréstimo
+                          </button>
+                          <button
+                            onClick={() => {
+                              window.location.href = "/dashboard/market?tab=trades";
+                            }}
+                            className="rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 py-2 text-xs font-bold text-white transition-all text-center"
+                          >
+                            🔄 Troca
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -489,6 +607,99 @@ export default function Scouting() {
             >
               Próximo
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Empréstimo */}
+      {showLoanModal && selectedLoanPlayer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="glass-panel w-full max-w-md p-6 rounded-2xl border border-white/10 bg-[#090d16]/95 shadow-2xl relative text-left">
+            <h3 className="text-lg font-bold text-white mb-2">Solicitar Empréstimo</h3>
+            <p className="text-xs text-gray-400 mb-6">
+              Proponha termos de empréstimo para contratar <strong className="text-white">{selectedLoanPlayer.name}</strong> temporariamente.
+            </p>
+
+            <div className="space-y-5">
+              {/* Informações Básicas do Jogador */}
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5">
+                <div className="h-12 w-12 rounded-full overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center">
+                  {selectedLoanPlayer.face_url ? (
+                    <img src={selectedLoanPlayer.face_url} alt="" className="h-full w-full object-cover scale-110" />
+                  ) : (
+                    <span className="text-xl">👤</span>
+                  )}
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white">{selectedLoanPlayer.name}</h4>
+                  <p className="text-[10px] text-gray-400">Rating {selectedLoanPlayer.rating} • Posição {selectedLoanPlayer.position} • {selectedLoanPlayer.teams?.name}</p>
+                </div>
+              </div>
+
+              {/* Duração em Semanas */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-2">Duração do Empréstimo:</label>
+                <select
+                  value={loanDuration}
+                  onChange={(e) => setLoanDuration(parseInt(e.target.value))}
+                  className="w-full rounded-xl border border-white/10 bg-[#090d16] py-2.5 px-4 text-white text-sm focus:border-[#3b82f6] outline-none"
+                >
+                  <option value="2">2 Rodadas / Semanas</option>
+                  <option value="4">4 Rodadas / Semanas (Recomendado)</option>
+                  <option value="6">6 Rodadas / Semanas</option>
+                  <option value="8">8 Rodadas / Semanas</option>
+                </select>
+              </div>
+
+              {/* Divisão Salarial (Slider) */}
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs font-semibold text-gray-300">Divisão do Salário Semanal:</label>
+                  <span className="text-xs font-bold text-[#3b82f6]">{loanSalaryPct}% pago por você</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="10"
+                  value={loanSalaryPct}
+                  onChange={(e) => setLoanSalaryPct(parseInt(e.target.value))}
+                  className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#3b82f6]"
+                />
+                <div className="flex justify-between text-[10px] text-gray-500 mt-2 font-mono">
+                  <span>Seu custo: R$ {((selectedLoanPlayer.wage * loanSalaryPct) / 100).toLocaleString("pt-BR")}</span>
+                  <span>Dono paga: R$ {((selectedLoanPlayer.wage * (100 - loanSalaryPct)) / 100).toLocaleString("pt-BR")}</span>
+                </div>
+              </div>
+
+              {/* Mensagem de Atenção sobre Teto */}
+              <p className="text-[10px] text-gray-500 bg-white/5 border border-white/5 p-3 rounded-xl">
+                💡 Nota: A proposta será enviada para a aba "Trocas & Propostas" do dono do jogador. Ao ser aceita, a sua parte salarial será computada na sua folha salarial total contra o seu teto máximo.
+              </p>
+
+              {/* Botões */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleSendLoanOffer}
+                  disabled={loanSubmitting}
+                  className="w-2/3 rounded-xl bg-[#3b82f6] hover:bg-blue-600 py-3 text-xs font-bold text-white shadow-lg transition-all"
+                >
+                  {loanSubmitting ? "Enviando..." : "Enviar Proposta"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowLoanModal(false);
+                    setSelectedLoanPlayer(null);
+                  }}
+                  disabled={loanSubmitting}
+                  className="w-1/3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 py-3 text-xs font-bold text-white transition-all"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

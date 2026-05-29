@@ -72,6 +72,7 @@ export default function AdminLayout({ children }) {
     { name: "Usuários & Times", path: "/admin/users", icon: "👥" },
     { name: "Importar Jogadores", path: "/admin/import", icon: "📥" },
     { name: "Disputas de Jogos", path: "/admin/disputes", icon: "⚔️" },
+    { name: "Auditoria Financeira", path: "/admin/audit", icon: "🧾" },
     { name: "Configurações", path: "/admin/settings", icon: "⚙️" },
   ];
 

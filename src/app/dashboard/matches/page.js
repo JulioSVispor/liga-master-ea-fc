@@ -18,6 +18,7 @@ export default function MatchesPage() {
   const [awaySquad, setAwaySquad] = useState([]);
   const [matchSuspensions, setMatchSuspensions] = useState([]); // IDs de jogadores suspensos neste jogo
   const [events, setEvents] = useState([]); // Array de { id, player_id, team_id, event_type, minute }
+  const [motmPlayerId, setMotmPlayerId] = useState("");
 
   // Estados de Contestação (Disputa)
   const [disputingMatch, setDisputingMatch] = useState(null);
@@ -66,7 +67,8 @@ export default function MatchesPage() {
             home_team:teams!home_team_id(*),
             away_team:teams!away_team_id(*),
             seasons!season_id(name),
-            leagues!league_id(name)
+            leagues!league_id(name),
+            motm_player:players!motm_player_id(name)
           `)
           .or(`home_team_id.eq.${team.id},away_team_id.eq.${team.id}`)
           .order("round_number", { ascending: true });
@@ -88,6 +90,7 @@ export default function MatchesPage() {
     setHomeScore("");
     setAwayScore("");
     setEvents([]);
+    setMotmPlayerId("");
 
     // 1. Carregar jogadores do time de casa
     const { data: homePlayers } = await supabase
@@ -157,13 +160,14 @@ export default function MatchesPage() {
     }
 
     try {
-      // 1. Atualizar Placar e Marcar como reportado
+      // 1. Placar, reportado por e MOTM
       const { error: matchError } = await supabase
         .from("matches")
         .update({
           home_score: parseInt(homeScore),
           away_score: parseInt(awayScore),
           reported_by: userProfile.id,
+          motm_player_id: motmPlayerId ? parseInt(motmPlayerId) : null,
         })
         .eq("id", reportingMatch.id);
 
@@ -356,6 +360,12 @@ export default function MatchesPage() {
                     </span>
                     <span className={!isHome ? "text-[#10b981]" : ""}>{match.away_team?.name}</span>
                   </div>
+
+                  {match.motm_player && (
+                    <div className="text-[10px] text-gray-400 mt-2 flex items-center gap-1 font-semibold">
+                      ⭐ <span className="text-amber-400">Craque do Jogo (MOTM):</span> {match.motm_player.name}
+                    </div>
+                  )}
                 </div>
 
                 {/* Ações */}
@@ -544,6 +554,32 @@ export default function MatchesPage() {
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Votação de Melhor em Campo (MOTM) */}
+              <div className="space-y-2 bg-[#0d1527]/30 p-4 rounded-xl border border-white/5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400">⭐ Melhor Jogador em Campo (MOTM)</label>
+                <select
+                  value={motmPlayerId}
+                  onChange={(e) => setMotmPlayerId(e.target.value)}
+                  className="w-full bg-[#060913] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                >
+                  <option value="">Selecione o craque da partida (opcional)...</option>
+                  <optgroup label={reportingMatch.home_team?.name}>
+                    {homeSquad.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.position} - Over {p.rating})
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label={reportingMatch.away_team?.name}>
+                    {awaySquad.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.position} - Over {p.rating})
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
               </div>
 
               {/* Botões do Form */}

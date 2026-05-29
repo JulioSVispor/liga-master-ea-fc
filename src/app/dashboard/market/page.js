@@ -19,12 +19,21 @@ export default function Market() {
   const [listingLoading, setListingLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
   const [bidAmounts, setBidAmounts] = useState({});
-
   // Estados para o Sistema de Trocas (Trades)
   const [receivedTrades, setReceivedTrades] = useState([]);
   const [sentTrades, setSentTrades] = useState([]);
   const [otherTeams, setOtherTeams] = useState([]);
   const [proposingTrade, setProposingTrade] = useState(false);
+
+  // Estados para Empréstimos (Fase 2)
+  const [receivedLoans, setReceivedLoans] = useState([]);
+  const [sentLoans, setSentLoans] = useState([]);
+  const [tradeOrLoanTab, setTradeOrLoanTab] = useState("trades"); // trades, loans
+
+  // Estados para Chat de Negociação (Fase 2)
+  const [activeChat, setActiveChat] = useState(null); // { type: 'trade' | 'loan', id: string, name: string }
+  const [chatMessages, setChatMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState("");
   
   // Formulário de Nova Troca
   const [selectedTargetTeamId, setSelectedTargetTeamId] = useState("");
@@ -71,7 +80,7 @@ export default function Market() {
               .order("created_at", { ascending: false });
             setMarketListings(listings || []);
           } else if (activeTab === "trades") {
-            // Carregar dados de trocas
+            // Carregar dados de trocas e empréstimos
             await loadTradesData(teamData.id);
           }
         }
@@ -111,8 +120,161 @@ export default function Market() {
         .eq("sender_team_id", myTeamId)
         .order("created_at", { ascending: false });
       setSentTrades(sent || []);
+
+      // 4. Empréstimos recebidos pendentes
+      const { data: recLoans } = await supabase
+        .from("loan_offers")
+        .select("*, sender_team:teams!sender_team_id(name), players(*)")
+        .eq("receiver_team_id", myTeamId)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
+      setReceivedLoans(recLoans || []);
+
+      // 5. Empréstimos enviados pendentes/gerais
+      const { data: sLoans } = await supabase
+        .from("loan_offers")
+        .select("*, receiver_team:teams!receiver_team_id(name), players(*)")
+        .eq("sender_team_id", myTeamId)
+        .order("created_at", { ascending: false });
+      setSentLoans(sLoans || []);
     } catch (err) {
-      console.error("Erro ao carregar dados de trocas:", err);
+      console.error("Erro ao carregar dados de trocas e empréstimos:", err);
+    }
+  };
+
+  // Carregar mensagens do Chat de Negociação
+  const loadChatMessages = async (chat) => {
+    try {
+      const field = chat.type === 'trade' ? 'trade_offer_id' : 'loan_offer_id';
+      const { data, error } = await supabase
+        .from("negotiation_messages")
+        .select("*, profiles(display_name)")
+        .eq(field, chat.id)
+        .order("created_at", { ascending: true });
+      
+      if (error) throw error;
+      setChatMessages(data || []);
+    } catch (err) {
+      console.error("Erro ao carregar chat:", err);
+    }
+  };
+
+  // Polling para Chat
+  useEffect(() => {
+    if (!activeChat) return;
+
+    loadChatMessages(activeChat);
+    const interval = setInterval(() => {
+      loadChatMessages(activeChat);
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [activeChat]);
+
+  // Enviar Mensagem no Chat
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !activeChat || !myTeam) return;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    try {
+      const field = activeChat.type === 'trade' ? 'trade_offer_id' : 'loan_offer_id';
+      const { error } = await supabase
+        .from("negotiation_messages")
+        .insert({
+          [field]: activeChat.id,
+          sender_id: session.user.id,
+          message: newMessage.trim()
+        });
+
+      if (error) throw error;
+
+      setNewMessage("");
+      await loadChatMessages(activeChat);
+    } catch (err) {
+      alert("Erro ao enviar mensagem: " + err.message);
+    }
+  };
+
+  // Aceitar Empréstimo
+  const handleAcceptLoan = async (loanId) => {
+    const confirmAccept = window.confirm(
+      "Deseja aceitar esta proposta de empréstimo? O jogador será transferido temporariamente para o time de destino e o salário dividido conforme o acordo."
+    );
+    if (!confirmAccept) return;
+
+    setActionLoading(loanId);
+    try {
+      const { data, error } = await supabase.rpc("accept_loan_offer", {
+        p_offer_id: loanId,
+      });
+
+      if (error) throw error;
+
+      if (data && data.success) {
+        alert(data.message);
+        const { data: teamData } = await supabase
+          .from("teams")
+          .select("*")
+          .eq("id", myTeam.id)
+          .single();
+        setMyTeam(teamData);
+        await loadTradesData(myTeam.id);
+      } else {
+        alert(data.message || "Erro desconhecido ao aceitar o empréstimo.");
+      }
+    } catch (err) {
+      alert("Erro ao finalizar empréstimo: " + err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Rejeitar Empréstimo
+  const handleRejectLoan = async (loanId) => {
+    const confirmReject = window.confirm("Deseja recusar esta proposta de empréstimo?");
+    if (!confirmReject) return;
+
+    setActionLoading(loanId);
+    try {
+      const { error } = await supabase
+        .from("loan_offers")
+        .update({ status: "rejected" })
+        .eq("id", loanId);
+
+      if (error) throw error;
+
+      alert("Proposta de empréstimo recusada!");
+      await loadTradesData(myTeam.id);
+    } catch (err) {
+      alert("Erro ao recusar: " + err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Cancelar Empréstimo
+  const handleCancelLoan = async (loanId) => {
+    const confirmCancel = window.confirm("Deseja cancelar esta proposta de empréstimo enviada?");
+    if (!confirmCancel) return;
+
+    setActionLoading(loanId);
+    try {
+      const { error } = await supabase
+        .from("loan_offers")
+        .update({ status: "cancelled" })
+        .eq("id", loanId);
+
+      if (error) throw error;
+
+      alert("Proposta de empréstimo cancelada!");
+      await loadTradesData(myTeam.id);
+    } catch (err) {
+      alert("Erro ao cancelar: " + err.message);
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -1012,162 +1174,413 @@ export default function Market() {
               </form>
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Propostas Recebidas */}
-              <div className="space-y-4">
-                <h3 className="text-base font-bold text-white border-l-2 border-[#3b82f6] pl-2">
-                  Propostas Recebidas ({receivedTrades.length})
-                </h3>
+            <div className="space-y-6">
+              {/* Sub-abas de Trocas vs Empréstimos */}
+              <div className="flex bg-white/5 p-1 rounded-xl w-fit gap-1">
+                <button
+                  onClick={() => setTradeOrLoanTab("trades")}
+                  className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    tradeOrLoanTab === "trades"
+                      ? "bg-[#3b82f6] text-white"
+                      : "text-gray-400 hover:text-gray-200"
+                  }`}
+                >
+                  🔄 Trocas Diretas ({receivedTrades.length + sentTrades.filter(t => t.status === 'pending').length})
+                </button>
+                <button
+                  onClick={() => setTradeOrLoanTab("loans")}
+                  className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    tradeOrLoanTab === "loans"
+                      ? "bg-[#3b82f6] text-white"
+                      : "text-gray-400 hover:text-gray-200"
+                  }`}
+                >
+                  🤝 Empréstimos ({receivedLoans.length + sentLoans.filter(l => l.status === 'pending').length})
+                </button>
+              </div>
 
-                {receivedTrades.length === 0 ? (
-                  <div className="glass-card py-10 text-center rounded-xl text-xs text-gray-500">
-                    Você não possui propostas de trocas pendentes.
-                  </div>
-                ) : (
+              {tradeOrLoanTab === "trades" ? (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* Propostas Recebidas */}
                   <div className="space-y-4">
-                    {receivedTrades.map((trade) => {
-                      const offeredPlayers = trade.trade_players.filter((tp) => tp.direction === "send");
-                      const requestedPlayers = trade.trade_players.filter((tp) => tp.direction === "receive");
+                    <h3 className="text-base font-bold text-white border-l-2 border-[#3b82f6] pl-2">
+                      Propostas Recebidas ({receivedTrades.length})
+                    </h3>
 
-                      return (
-                        <div key={trade.id} className="glass-card p-5 rounded-2xl border border-white/5 space-y-4">
-                          <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                            <span className="text-xs font-semibold text-gray-400">
-                              Proposta de: <strong className="text-white">{trade.sender_team?.name}</strong>
-                            </span>
-                            <span className="text-[10px] text-gray-500">
-                              Validade: {new Date(trade.expires_at).toLocaleDateString()}
-                            </span>
-                          </div>
+                    {receivedTrades.length === 0 ? (
+                      <div className="glass-card py-10 text-center rounded-xl text-xs text-gray-500">
+                        Você não possui propostas de trocas pendentes.
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {receivedTrades.map((trade) => {
+                          const offeredPlayers = trade.trade_players.filter((tp) => tp.direction === "send");
+                          const requestedPlayers = trade.trade_players.filter((tp) => tp.direction === "receive");
 
-                          <div className="grid grid-cols-2 gap-4 text-xs">
-                            {/* O que ele oferece para nós */}
-                            <div className="space-y-2">
-                              <span className="text-[9px] uppercase font-bold text-[#10b981]">Você Recebe:</span>
-                              <ul className="space-y-1">
-                                {offeredPlayers.map((tp) => (
-                                  <li key={tp.id} className="text-gray-300">• {tp.players.name} ({tp.players.position} - Over {tp.players.rating})</li>
-                                ))}
-                                {trade.offered_money > 0 && (
-                                  <li className="font-bold text-emerald-400">+ R$ {parseFloat(trade.offered_money).toLocaleString()}</li>
-                                )}
-                              </ul>
+                          return (
+                            <div key={trade.id} className="glass-card p-5 rounded-2xl border border-white/5 space-y-4">
+                              <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                                <span className="text-xs font-semibold text-gray-400">
+                                  Proposta de: <strong className="text-white">{trade.sender_team?.name}</strong>
+                                </span>
+                                <span className="text-[10px] text-gray-500">
+                                  Validade: {new Date(trade.expires_at).toLocaleDateString()}
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-4 text-xs">
+                                {/* O que ele oferece para nós */}
+                                <div className="space-y-2">
+                                  <span className="text-[9px] uppercase font-bold text-[#10b981]">Você Recebe:</span>
+                                  <ul className="space-y-1">
+                                    {offeredPlayers.map((tp) => (
+                                      <li key={tp.id} className="text-gray-300">• {tp.players.name} ({tp.players.position} - Over {tp.players.rating})</li>
+                                    ))}
+                                    {trade.offered_money > 0 && (
+                                      <li className="font-bold text-emerald-400">+ R$ {parseFloat(trade.offered_money).toLocaleString()}</li>
+                                    )}
+                                  </ul>
+                                </div>
+
+                                {/* O que ele quer em troca */}
+                                <div className="space-y-2">
+                                  <span className="text-[9px] uppercase font-bold text-[#3b82f6]">Você Envia:</span>
+                                  <ul className="space-y-1">
+                                    {requestedPlayers.map((tp) => (
+                                      <li key={tp.id} className="text-gray-300">• {tp.players.name} ({tp.players.position} - Over {tp.players.rating})</li>
+                                    ))}
+                                    {trade.requested_money > 0 && (
+                                      <li className="font-bold text-amber-500">+ R$ {parseFloat(trade.requested_money).toLocaleString()}</li>
+                                    )}
+                                  </ul>
+                                </div>
+                              </div>
+
+                              {/* Ações */}
+                              <div className="flex gap-2 pt-2 border-t border-white/5">
+                                <button
+                                  onClick={() => handleAcceptTrade(trade.id)}
+                                  disabled={actionLoading !== null}
+                                  className="w-1/3 rounded-xl bg-[#10b981] hover:bg-[#059669] py-2 text-xs font-bold text-white shadow"
+                                >
+                                  Aceitar
+                                </button>
+                                <button
+                                  onClick={() => handleRejectTrade(trade.id)}
+                                  disabled={actionLoading !== null}
+                                  className="w-1/3 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 py-2 text-xs font-bold text-red-400"
+                                >
+                                  Recusar
+                                </button>
+                                <button
+                                  onClick={() => setActiveChat({ type: 'trade', id: trade.id, name: `${trade.sender_team?.name} x Você` })}
+                                  className="w-1/3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 py-2 text-xs font-bold text-white flex items-center justify-center gap-1"
+                                >
+                                  💬 Chat
+                                </button>
+                              </div>
                             </div>
-
-                            {/* O que ele quer em troca */}
-                            <div className="space-y-2">
-                              <span className="text-[9px] uppercase font-bold text-[#3b82f6]">Você Envia:</span>
-                              <ul className="space-y-1">
-                                {requestedPlayers.map((tp) => (
-                                  <li key={tp.id} className="text-gray-300">• {tp.players.name} ({tp.players.position} - Over {tp.players.rating})</li>
-                                ))}
-                                {trade.requested_money > 0 && (
-                                  <li className="font-bold text-amber-500">+ R$ {parseFloat(trade.requested_money).toLocaleString()}</li>
-                                )}
-                              </ul>
-                            </div>
-                          </div>
-
-                          {/* Ações */}
-                          <div className="flex gap-2 pt-2 border-t border-white/5">
-                            <button
-                              onClick={() => handleAcceptTrade(trade.id)}
-                              disabled={actionLoading !== null}
-                              className="w-1/2 rounded-xl bg-[#10b981] hover:bg-[#059669] py-2 text-xs font-bold text-white shadow"
-                            >
-                              Aceitar Proposta
-                            </button>
-                            <button
-                              onClick={() => handleRejectTrade(trade.id)}
-                              disabled={actionLoading !== null}
-                              className="w-1/2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 py-2 text-xs font-bold text-red-400"
-                            >
-                              Recusar
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
 
-              {/* Propostas Enviadas */}
-              <div className="space-y-4">
-                <h3 className="text-base font-bold text-white border-l-2 border-gray-500 pl-2">
-                  Propostas Enviadas ({sentTrades.length})
-                </h3>
+                  {/* Propostas Enviadas */}
+                  <div className="space-y-4">
+                    <h3 className="text-base font-bold text-white border-l-2 border-gray-500 pl-2">
+                      Propostas Enviadas ({sentTrades.length})
+                    </h3>
 
-                {sentTrades.length === 0 ? (
-                  <div className="glass-card py-10 text-center rounded-xl text-xs text-gray-500">
-                    Você não enviou nenhuma proposta recentemente.
-                  </div>
-                ) : (
-                  <div className="space-y-4 max-h-[500px] overflow-y-auto">
-                    {sentTrades.map((trade) => {
-                      const offeredPlayers = trade.trade_players.filter((tp) => tp.direction === "send");
-                      const requestedPlayers = trade.trade_players.filter((tp) => tp.direction === "receive");
+                    {sentTrades.length === 0 ? (
+                      <div className="glass-card py-10 text-center rounded-xl text-xs text-gray-500">
+                        Você não enviou nenhuma proposta recentemente.
+                      </div>
+                    ) : (
+                      <div className="space-y-4 max-h-[500px] overflow-y-auto">
+                        {sentTrades.map((trade) => {
+                          const offeredPlayers = trade.trade_players.filter((tp) => tp.direction === "send");
+                          const requestedPlayers = trade.trade_players.filter((tp) => tp.direction === "receive");
 
-                      return (
-                        <div key={trade.id} className="glass-card p-5 rounded-2xl border border-white/5 space-y-4 opacity-85">
-                          <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                            <span className="text-xs font-semibold text-gray-400">
-                              Proposta para: <strong className="text-white">{trade.receiver_team?.name}</strong>
-                            </span>
-                            <span className={`text-[10px] uppercase font-black ${
-                              trade.status === "pending"
-                                ? "text-amber-400 animate-pulse"
-                                : trade.status === "accepted"
-                                  ? "text-emerald-400"
-                                  : "text-red-400"
-                            }`}>
-                              {trade.status === "pending" ? "Pendente" : trade.status === "accepted" ? "Aceita" : "Recusada/Cancelada"}
-                            </span>
-                          </div>
+                          return (
+                            <div key={trade.id} className="glass-card p-5 rounded-2xl border border-white/5 space-y-4 opacity-85">
+                              <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                                <span className="text-xs font-semibold text-gray-400">
+                                  Proposta para: <strong className="text-white">{trade.receiver_team?.name}</strong>
+                                </span>
+                                <span className={`text-[10px] uppercase font-black ${
+                                  trade.status === "pending"
+                                    ? "text-amber-400 animate-pulse"
+                                    : trade.status === "accepted"
+                                      ? "text-emerald-400"
+                                      : "text-red-400"
+                                }`}>
+                                  {trade.status === "pending" ? "Pendente" : trade.status === "accepted" ? "Aceita" : "Recusada/Cancelada"}
+                                </span>
+                              </div>
 
-                          <div className="grid grid-cols-2 gap-4 text-xs">
-                            <div className="space-y-2">
-                              <span className="text-[9px] uppercase font-bold text-gray-500">Você Envia:</span>
-                              <ul className="space-y-1 text-gray-400">
-                                {offeredPlayers.map((tp) => (
-                                  <li key={tp.id}>• {tp.players.name} ({tp.players.position})</li>
-                                ))}
-                                {trade.offered_money > 0 && (
-                                  <li className="font-bold text-emerald-600">+ R$ {parseFloat(trade.offered_money).toLocaleString()}</li>
+                              <div className="grid grid-cols-2 gap-4 text-xs">
+                                <div className="space-y-2">
+                                  <span className="text-[9px] uppercase font-bold text-gray-500">Você Envia:</span>
+                                  <ul className="space-y-1 text-gray-400">
+                                    {offeredPlayers.map((tp) => (
+                                      <li key={tp.id}>• {tp.players.name} ({tp.players.position})</li>
+                                    ))}
+                                    {trade.offered_money > 0 && (
+                                      <li className="font-bold text-emerald-600">+ R$ {parseFloat(trade.offered_money).toLocaleString()}</li>
+                                    )}
+                                  </ul>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <span className="text-[9px] uppercase font-bold text-gray-500">Você Recebe:</span>
+                                  <ul className="space-y-1 text-gray-400">
+                                    {requestedPlayers.map((tp) => (
+                                      <li key={tp.id}>• {tp.players.name} ({tp.players.position})</li>
+                                    ))}
+                                    {trade.requested_money > 0 && (
+                                      <li className="font-bold text-blue-400">+ R$ {parseFloat(trade.requested_money).toLocaleString()}</li>
+                                    )}
+                                  </ul>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-2">
+                                {trade.status === "pending" && (
+                                  <button
+                                    onClick={() => handleCancelTrade(trade.id)}
+                                    disabled={actionLoading !== null}
+                                    className="w-1/2 rounded-xl bg-white/5 border border-white/10 hover:bg-red-500/10 hover:text-red-400 py-2 text-xs font-bold text-gray-300 transition-all"
+                                  >
+                                    Cancelar
+                                  </button>
                                 )}
-                              </ul>
+                                <button
+                                  onClick={() => setActiveChat({ type: 'trade', id: trade.id, name: `Você x ${trade.receiver_team?.name}` })}
+                                  className={`${trade.status === "pending" ? "w-1/2" : "w-full"} rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 py-2 text-xs font-bold text-white flex items-center justify-center gap-1`}
+                                >
+                                  💬 Chat
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* Empréstimos Recebidos */}
+                  <div className="space-y-4">
+                    <h3 className="text-base font-bold text-white border-l-2 border-[#3b82f6] pl-2">
+                      Empréstimos Recebidos ({receivedLoans.length})
+                    </h3>
+
+                    {receivedLoans.length === 0 ? (
+                      <div className="glass-card py-10 text-center rounded-xl text-xs text-gray-500">
+                        Você não possui propostas de empréstimo pendentes.
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {receivedLoans.map((loan) => (
+                          <div key={loan.id} className="glass-card p-5 rounded-2xl border border-white/5 space-y-4">
+                            <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                              <span className="text-xs font-semibold text-gray-400">
+                                Proposta de: <strong className="text-white">{loan.sender_team?.name}</strong>
+                              </span>
+                              <span className="text-[10px] text-gray-500">
+                                Validade: {new Date(loan.expires_at).toLocaleDateString()}
+                              </span>
                             </div>
 
-                            <div className="space-y-2">
-                              <span className="text-[9px] uppercase font-bold text-gray-500">Você Recebe:</span>
-                              <ul className="space-y-1 text-gray-400">
-                                {requestedPlayers.map((tp) => (
-                                  <li key={tp.id}>• {tp.players.name} ({tp.players.position})</li>
-                                ))}
-                                {trade.requested_money > 0 && (
-                                  <li className="font-bold text-blue-400">+ R$ {parseFloat(trade.requested_money).toLocaleString()}</li>
-                                )}
-                              </ul>
+                            <div className="text-xs space-y-2">
+                              <p className="text-gray-300">
+                                Jogador solicitado: <strong className="text-white">{loan.players?.name}</strong> ({loan.players?.position} - Over {loan.players?.rating})
+                              </p>
+                              <div className="grid grid-cols-2 gap-2 text-[11px] bg-white/5 p-2 rounded-xl">
+                                <div>
+                                  <span className="text-gray-500 block">Duração:</span>
+                                  <span className="text-white font-bold">{loan.duration_weeks} Semanas</span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500 block">Divisão Salarial:</span>
+                                  <span className="text-[#3b82f6] font-bold">Você paga {100 - loan.salary_share_pct}% / Eles pagam {loan.salary_share_pct}%</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Ações */}
+                            <div className="flex gap-2 pt-2 border-t border-white/5">
+                              <button
+                                onClick={() => handleAcceptLoan(loan.id)}
+                                disabled={actionLoading !== null}
+                                className="w-1/3 rounded-xl bg-[#10b981] hover:bg-[#059669] py-2 text-xs font-bold text-white shadow"
+                              >
+                                Aceitar
+                              </button>
+                              <button
+                                onClick={() => handleRejectLoan(loan.id)}
+                                disabled={actionLoading !== null}
+                                className="w-1/3 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 py-2 text-xs font-bold text-red-400"
+                              >
+                                Recusar
+                              </button>
+                              <button
+                                onClick={() => setActiveChat({ type: 'loan', id: loan.id, name: loan.players?.name })}
+                                className="w-1/3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 py-2 text-xs font-bold text-white flex items-center justify-center gap-1"
+                              >
+                                💬 Chat
+                              </button>
                             </div>
                           </div>
-
-                          {trade.status === "pending" && (
-                            <button
-                              onClick={() => handleCancelTrade(trade.id)}
-                              disabled={actionLoading !== null}
-                              className="w-full rounded-xl bg-white/5 border border-white/10 hover:bg-red-500/10 hover:text-red-400 py-2 text-xs font-bold text-gray-300 transition-all"
-                            >
-                              Cancelar Proposta
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+
+                  {/* Empréstimos Enviados */}
+                  <div className="space-y-4">
+                    <h3 className="text-base font-bold text-white border-l-2 border-gray-500 pl-2">
+                      Empréstimos Enviados ({sentLoans.length})
+                    </h3>
+
+                    {sentLoans.length === 0 ? (
+                      <div className="glass-card py-10 text-center rounded-xl text-xs text-gray-500">
+                        Você não enviou propostas de empréstimo.
+                      </div>
+                    ) : (
+                      <div className="space-y-4 max-h-[500px] overflow-y-auto">
+                        {sentLoans.map((loan) => (
+                          <div key={loan.id} className="glass-card p-5 rounded-2xl border border-white/5 space-y-4 opacity-90">
+                            <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                              <span className="text-xs font-semibold text-gray-400">
+                                Proposta para: <strong className="text-white">{loan.receiver_team?.name}</strong>
+                              </span>
+                              <span className={`text-[10px] uppercase font-black ${
+                                loan.status === "pending"
+                                  ? "text-amber-400 animate-pulse"
+                                  : loan.status === "accepted"
+                                    ? "text-emerald-400"
+                                    : "text-red-400"
+                              }`}>
+                                {loan.status === "pending" ? "Pendente" : loan.status === "accepted" ? "Aceito" : "Recusado/Cancelado"}
+                              </span>
+                            </div>
+
+                            <div className="text-xs space-y-2">
+                              <p className="text-gray-300">
+                                Jogador solicitado: <strong className="text-white">{loan.players?.name}</strong> ({loan.players?.position} - Over {loan.players?.rating})
+                              </p>
+                              <div className="grid grid-cols-2 gap-2 text-[11px] bg-white/5 p-2 rounded-xl">
+                                <div>
+                                  <span className="text-gray-500 block">Duração:</span>
+                                  <span className="text-white font-bold">{loan.duration_weeks} Semanas</span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500 block">Divisão Salarial:</span>
+                                  <span className="text-[#3b82f6] font-bold">Você paga {loan.salary_share_pct}% / Eles pagam {100 - loan.salary_share_pct}%</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2 pt-2 border-t border-white/5">
+                              {loan.status === "pending" && (
+                                <button
+                                  onClick={() => handleCancelLoan(loan.id)}
+                                  disabled={actionLoading !== null}
+                                  className="w-1/2 rounded-xl bg-white/5 border border-white/10 hover:bg-red-500/10 hover:text-red-400 py-2 text-xs font-bold text-gray-300 transition-all"
+                                >
+                                  Cancelar
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setActiveChat({ type: 'loan', id: loan.id, name: loan.players?.name })}
+                                className={`${loan.status === "pending" ? "w-1/2" : "w-full"} rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 py-2 text-xs font-bold text-white flex items-center justify-center gap-1`}
+                              >
+                                💬 Chat
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Painel/Modal do Chat de Negociação (Fase 2) */}
+      {activeChat && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="glass-panel w-full max-w-lg h-[500px] flex flex-col justify-between p-6 rounded-2xl border border-white/10 bg-[#090d16]/95 shadow-2xl relative text-left">
+            {/* Header do Chat */}
+            <div className="flex justify-between items-center border-b border-white/5 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-white">Chat de Negociação</h3>
+                <p className="text-[10px] text-gray-400">Conversando sobre a proposta de {activeChat.type === "trade" ? "Troca" : "Empréstimo"} ({activeChat.name})</p>
+              </div>
+              <button
+                onClick={() => {
+                  setActiveChat(null);
+                  setChatMessages([]);
+                }}
+                className="text-gray-400 hover:text-white text-xs bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-lg"
+              >
+                Fechar
+              </button>
+            </div>
+
+            {/* Corpo com mensagens */}
+            <div className="flex-1 overflow-y-auto py-4 space-y-3 pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+              {chatMessages.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-xs text-gray-500">
+                  Nenhuma mensagem enviada. Comece a negociar abaixo!
+                </div>
+              ) : (
+                chatMessages.map((msg) => {
+                  const isMe = msg.sender_id === myTeam?.user_id;
+                  return (
+                    <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                      <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-xs shadow-md ${
+                        isMe
+                          ? "bg-gradient-to-r from-[#10b981] to-[#059669] text-white rounded-tr-none"
+                          : "bg-white/5 border border-white/5 text-gray-300 rounded-tl-none"
+                      }`}>
+                        <div className="font-bold text-[9px] text-white/60 mb-0.5">
+                          {isMe ? "Você" : msg.profiles?.display_name || "Adversário"}
+                        </div>
+                        <p className="leading-relaxed font-sans text-white">{msg.message}</p>
+                        <span className="text-[8px] text-white/40 block text-right mt-1">
+                          {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Input de envio */}
+            <form onSubmit={handleSendMessage} className="border-t border-white/5 pt-3 flex gap-2">
+              <input
+                type="text"
+                placeholder="Digite sua mensagem de contraproposta..."
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 py-2.5 px-4 text-white text-xs outline-none focus:border-[#10b981]"
+              />
+              <button
+                type="submit"
+                className="rounded-xl bg-[#10b981] hover:bg-[#059669] px-5 py-2.5 text-xs font-bold text-white shadow-lg transition-all"
+              >
+                Enviar
+              </button>
+            </form>
+          </div>
         </div>
       )}
     </div>

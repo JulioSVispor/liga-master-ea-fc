@@ -9,13 +9,18 @@ export default function StandingsPage() {
   const [leagues, setLeagues] = useState([]);
   const [selectedLeague, setSelectedLeague] = useState(null);
   
-  const [activeTab, setActiveTab] = useState("table"); // "table", "scorers", "assists", "suspensions"
+  const [activeTab, setActiveTab] = useState("table"); // "table", "scorers", "assists", "suspensions", "cups"
   
   const [standings, setStandings] = useState([]);
   const [topScorers, setTopScorers] = useState([]);
   const [topAssists, setTopAssists] = useState([]);
   const [suspensions, setSuspensions] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Estados de Copas (Mata-Mata)
+  const [allCups, setAllCups] = useState([]);
+  const [selectedCup, setSelectedCup] = useState("");
+  const [cupMatches, setCupMatches] = useState([]);
 
   useEffect(() => {
     loadSeasons();
@@ -24,11 +29,22 @@ export default function StandingsPage() {
   useEffect(() => {
     if (selectedSeason) {
       loadLeagues(selectedSeason.id);
+      loadCups(selectedSeason.id);
     } else {
       setLeagues([]);
       setSelectedLeague(null);
+      setAllCups([]);
+      setSelectedCup("");
     }
   }, [selectedSeason]);
+
+  useEffect(() => {
+    if (selectedCup && selectedSeason) {
+      loadCupMatches(selectedCup, selectedSeason.id);
+    } else {
+      setCupMatches([]);
+    }
+  }, [selectedCup, selectedSeason]);
 
   useEffect(() => {
     if (selectedLeague) {
@@ -63,6 +79,39 @@ export default function StandingsPage() {
     if (!error && data) {
       setLeagues(data);
       if (data.length > 0) setSelectedLeague(data[0]);
+    }
+  };
+
+  const loadCups = async (seasonId) => {
+    const { data, error } = await supabase
+      .from("matches")
+      .select("cup_name")
+      .eq("season_id", seasonId)
+      .is("league_id", null)
+      .not("cup_name", "is", null);
+
+    if (!error && data) {
+      const uniqueCups = Array.from(new Set(data.map(m => m.cup_name).filter(Boolean)));
+      setAllCups(uniqueCups);
+      if (uniqueCups.length > 0) {
+        setSelectedCup(uniqueCups[0]);
+      } else {
+        setSelectedCup("");
+      }
+    }
+  };
+
+  const loadCupMatches = async (cupName, seasonId) => {
+    const { data, error } = await supabase
+      .from("matches")
+      .select("*, home_team:teams!home_team_id(*), away_team:teams!away_team_id(*)")
+      .eq("season_id", seasonId)
+      .eq("cup_name", cupName)
+      .is("league_id", null)
+      .order("round_number", { ascending: true });
+
+    if (!error && data) {
+      setCupMatches(data);
     }
   };
 
@@ -263,6 +312,16 @@ export default function StandingsPage() {
             </span>
           )}
         </button>
+        <button
+          onClick={() => setActiveTab("cups")}
+          className={`px-4 py-3 text-xs uppercase font-bold tracking-wider border-b-2 transition-all flex items-center gap-2 ${
+            activeTab === "cups"
+              ? "border-[#10b981] text-[#10b981]"
+              : "border-transparent text-gray-400 hover:text-white"
+          }`}
+        >
+          🏆 Copas Mata-Mata
+        </button>
       </div>
 
       {loading ? (
@@ -456,7 +515,7 @@ export default function StandingsPage() {
                     <tr key={susp.id} className="hover:bg-white/5 transition-colors">
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
-                          <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>
+                           <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>
                           <div>
                             <p className="text-sm font-bold text-white">{susp.players?.name}</p>
                             <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
@@ -499,6 +558,235 @@ export default function StandingsPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* TAB 5: Copas Mata-Mata (Bracket Visual) */}
+          {activeTab === "cups" && (
+            <div className="space-y-6">
+              {/* Seleção de Copa */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-[#0d1527]/30 p-4 rounded-xl border border-white/5">
+                <div>
+                  <h3 className="text-sm font-bold text-white">Chaveamento da Copa</h3>
+                  <p className="text-xs text-gray-400">Selecione a copa ativa para visualizar a árvore do torneio.</p>
+                </div>
+                <select
+                  value={selectedCup}
+                  onChange={(e) => setSelectedCup(e.target.value)}
+                  className="bg-[#0d1527] border border-white/10 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-[#10b981] w-full sm:w-auto min-w-[200px]"
+                  disabled={allCups.length === 0}
+                >
+                  {allCups.map((cup) => (
+                    <option key={cup} value={cup}>
+                      {cup}
+                    </option>
+                  ))}
+                  {allCups.length === 0 && <option value="">Nenhuma copa criada</option>}
+                </select>
+              </div>
+
+              {selectedCup ? (
+                <div className="overflow-x-auto pb-4 pt-2">
+                  <div className="flex flex-row justify-center items-center gap-12 min-w-[800px] py-4">
+                    {/* Quartas de Final */}
+                    {cupMatches.some(m => m.round_number === 1) && (
+                      <div className="flex flex-col justify-between gap-6 h-[520px] w-[260px]">
+                        <div className="text-center text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-white/5 pb-2">
+                          Quartas de Final
+                        </div>
+                        <div className="flex flex-col justify-between h-full py-4 gap-4">
+                          {cupMatches.filter(m => m.round_number === 1).map((m) => {
+                            const isHomeWinner = m.status === "confirmed" && m.home_score > m.away_score;
+                            const isAwayWinner = m.status === "confirmed" && m.away_score > m.home_score;
+                            return (
+                              <div
+                                key={m.id}
+                                className="p-3 rounded-xl bg-[#0b0f19] border border-white/5 hover:border-emerald-500/30 transition-all flex flex-col gap-2 relative overflow-hidden shadow-lg shadow-black/20"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 truncate">
+                                    {m.home_team?.badge_url ? (
+                                      <img src={m.home_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                    ) : (
+                                      <span className="text-xs">🛡️</span>
+                                    )}
+                                    <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isHomeWinner ? "text-gray-500" : "text-gray-200"}`}>
+                                      {m.home_team?.name || "A definir"}
+                                    </span>
+                                  </div>
+                                  {m.status === "confirmed" ? (
+                                    <span className={`text-xs font-extrabold ${isHomeWinner ? "text-emerald-400" : "text-gray-500"}`}>
+                                      {m.home_score}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-gray-600 font-bold">-</span>
+                                  )}
+                                </div>
+                                <div className="border-t border-white/5 my-0.5"></div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 truncate">
+                                    {m.away_team?.badge_url ? (
+                                      <img src={m.away_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                    ) : (
+                                      <span className="text-xs">🛡️</span>
+                                    )}
+                                    <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isAwayWinner ? "text-gray-500" : "text-gray-200"}`}>
+                                      {m.away_team?.name || "A definir"}
+                                    </span>
+                                  </div>
+                                  {m.status === "confirmed" ? (
+                                    <span className={`text-xs font-extrabold ${isAwayWinner ? "text-emerald-400" : "text-gray-500"}`}>
+                                      {m.away_score}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-gray-600 font-bold">-</span>
+                                  )}
+                                </div>
+                                {m.status === "pending" && <div className="absolute top-0 right-0 h-1 w-full bg-blue-500/30"></div>}
+                                {m.status === "dispute" && <div className="absolute top-0 right-0 h-1 w-full bg-red-500 animate-pulse"></div>}
+                                {m.status === "confirmed" && <div className="absolute top-0 right-0 h-1 w-full bg-emerald-500/50"></div>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Semifinais */}
+                    {cupMatches.some(m => m.round_number === 2) && (
+                      <div className="flex flex-col justify-between gap-6 h-[520px] w-[260px]">
+                        <div className="text-center text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-white/5 pb-2">
+                          Semifinais
+                        </div>
+                        <div className="flex flex-col justify-around h-full py-8 gap-8">
+                          {cupMatches.filter(m => m.round_number === 2).map((m) => {
+                            const isHomeWinner = m.status === "confirmed" && m.home_score > m.away_score;
+                            const isAwayWinner = m.status === "confirmed" && m.away_score > m.home_score;
+                            return (
+                              <div
+                                key={m.id}
+                                className="p-3 rounded-xl bg-[#0b0f19] border border-white/5 hover:border-emerald-500/30 transition-all flex flex-col gap-2 relative overflow-hidden shadow-lg shadow-black/20"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 truncate">
+                                    {m.home_team?.badge_url ? (
+                                      <img src={m.home_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                    ) : (
+                                      <span className="text-xs">🛡️</span>
+                                    )}
+                                    <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isHomeWinner ? "text-gray-500" : "text-gray-200"}`}>
+                                      {m.home_team?.name || "A definir"}
+                                    </span>
+                                  </div>
+                                  {m.status === "confirmed" ? (
+                                    <span className={`text-xs font-extrabold ${isHomeWinner ? "text-emerald-400" : "text-gray-500"}`}>
+                                      {m.home_score}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-gray-600 font-bold">-</span>
+                                  )}
+                                </div>
+                                <div className="border-t border-white/5 my-0.5"></div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 truncate">
+                                    {m.away_team?.badge_url ? (
+                                      <img src={m.away_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                    ) : (
+                                      <span className="text-xs">🛡️</span>
+                                    )}
+                                    <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isAwayWinner ? "text-gray-500" : "text-gray-200"}`}>
+                                      {m.away_team?.name || "A definir"}
+                                    </span>
+                                  </div>
+                                  {m.status === "confirmed" ? (
+                                    <span className={`text-xs font-extrabold ${isAwayWinner ? "text-emerald-400" : "text-gray-500"}`}>
+                                      {m.away_score}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-gray-600 font-bold">-</span>
+                                  )}
+                                </div>
+                                {m.status === "pending" && <div className="absolute top-0 right-0 h-1 w-full bg-blue-500/30"></div>}
+                                {m.status === "dispute" && <div className="absolute top-0 right-0 h-1 w-full bg-red-500 animate-pulse"></div>}
+                                {m.status === "confirmed" && <div className="absolute top-0 right-0 h-1 w-full bg-emerald-500/50"></div>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Grande Final */}
+                    {cupMatches.some(m => m.round_number === 3) && (
+                      <div className="flex flex-col justify-between gap-6 h-[520px] w-[260px]">
+                        <div className="text-center text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-white/5 pb-2">
+                          Grande Final
+                        </div>
+                        <div className="flex flex-col justify-center h-full">
+                          {cupMatches.filter(m => m.round_number === 3).map((m) => {
+                            const isHomeWinner = m.status === "confirmed" && m.home_score > m.away_score;
+                            const isAwayWinner = m.status === "confirmed" && m.away_score > m.home_score;
+                            return (
+                              <div
+                                key={m.id}
+                                className="p-3 rounded-xl bg-gradient-to-br from-[#1b233a] to-[#0b0f19] border border-amber-500/30 hover:border-amber-500/50 transition-all flex flex-col gap-2 relative overflow-hidden shadow-xl shadow-amber-500/5"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 truncate">
+                                    {m.home_team?.badge_url ? (
+                                      <img src={m.home_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                    ) : (
+                                      <span className="text-xs">🛡️</span>
+                                    )}
+                                    <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isHomeWinner ? "text-gray-500" : "text-gray-200"}`}>
+                                      {m.home_team?.name || "A definir"}
+                                    </span>
+                                  </div>
+                                  {m.status === "confirmed" ? (
+                                    <span className={`text-xs font-extrabold ${isHomeWinner ? "text-amber-400" : "text-gray-500"}`}>
+                                      {m.home_score}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-gray-600 font-bold">-</span>
+                                  )}
+                                </div>
+                                <div className="border-t border-white/5 my-0.5"></div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 truncate">
+                                    {m.away_team?.badge_url ? (
+                                      <img src={m.away_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                    ) : (
+                                      <span className="text-xs">🛡️</span>
+                                    )}
+                                    <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isAwayWinner ? "text-gray-500" : "text-gray-200"}`}>
+                                      {m.away_team?.name || "A definir"}
+                                    </span>
+                                  </div>
+                                  {m.status === "confirmed" ? (
+                                    <span className={`text-xs font-extrabold ${isAwayWinner ? "text-amber-400" : "text-gray-500"}`}>
+                                      {m.away_score}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-gray-600 font-bold">-</span>
+                                  )}
+                                </div>
+                                {m.status === "pending" && <div className="absolute top-0 right-0 h-1 w-full bg-amber-500/30"></div>}
+                                {m.status === "dispute" && <div className="absolute top-0 right-0 h-1 w-full bg-red-500 animate-pulse"></div>}
+                                {m.status === "confirmed" && <div className="absolute top-0 right-0 h-1 w-full bg-amber-500"></div>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="py-12 text-center text-gray-500 text-xs border border-dashed border-white/5 rounded-2xl bg-[#090d16]/20">
+                  <span className="text-3xl block mb-2">🏆</span>
+                  Nenhuma copa mata-mata ativa nesta temporada.
+                </div>
+              )}
             </div>
           )}
         </div>

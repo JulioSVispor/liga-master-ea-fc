@@ -83,6 +83,8 @@ export default function UserDashboardLayout({ children }) {
     { name: "Mercado", path: "/dashboard/market", icon: "💱" },
     { name: "Partidas", path: "/dashboard/matches", icon: "⚽" },
     { name: "Classificação", path: "/dashboard/standings", icon: "📈" },
+    { name: "Histórico", path: "/dashboard/negotiations", icon: "📋" },
+    { name: "Perfil", path: "/dashboard/profile", icon: "⚙️" },
   ];
 
   // Calcular porcentagem do teto de salários

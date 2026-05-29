@@ -68,9 +68,11 @@ export default function AdminLayout({ children }) {
 
   const menuItems = [
     { name: "Visão Geral", path: "/admin", icon: "📊" },
-    { name: "Configurações da Liga", path: "/admin/leagues", icon: "⚙️" },
+    { name: "Ligas & Copas", path: "/admin/leagues", icon: "🏆" },
+    { name: "Usuários & Times", path: "/admin/users", icon: "👥" },
     { name: "Importar Jogadores", path: "/admin/import", icon: "📥" },
     { name: "Disputas de Jogos", path: "/admin/disputes", icon: "⚔️" },
+    { name: "Configurações", path: "/admin/settings", icon: "⚙️" },
   ];
 
   return (

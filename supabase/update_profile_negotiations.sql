@@ -1,6 +1,7 @@
 -- 1. Adicionar colunas necessárias
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS whatsapp text;
 ALTER TABLE public.teams ADD COLUMN IF NOT EXISTS formation text DEFAULT '4-3-3';
+ALTER TABLE public.matches ADD COLUMN IF NOT EXISTS cup_name text;
 
 -- 2. Tabela de Histórico de Negociações (Transfer History)
 CREATE TABLE IF NOT EXISTS public.transfer_history (

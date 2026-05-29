@@ -340,7 +340,7 @@ export default function MatchesPage() {
                       Rodada {match.round_number}
                     </span>
                     <span className="text-[10px] font-bold text-[#10b981] bg-[#10b981]/15 px-2.5 py-0.5 rounded border border-[#10b981]/20">
-                      {match.seasons?.name} - {match.leagues?.name || "Copa"}
+                      {match.seasons?.name} - {match.cup_name || match.leagues?.name || "Copa"}
                     </span>
                     {match.status === "dispute" && (
                       <span className="text-[10px] font-bold text-red-400 bg-red-500/10 px-2.5 py-0.5 rounded border border-red-500/20">

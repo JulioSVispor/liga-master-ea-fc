@@ -118,7 +118,14 @@ export default function AdminLayout({ children }) {
         </nav>
 
         {/* Footer Sidebar */}
-        <div className="p-4 border-t border-white/5">
+        <div className="p-4 border-t border-white/5 space-y-1">
+          <Link
+            href="/dashboard"
+            className="flex w-full items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-[#10b981] hover:bg-[#10b981]/10 transition-all"
+          >
+            <span>🛡️</span>
+            Painel do Clube
+          </Link>
           <button
             onClick={handleLogout}
             className="flex w-full items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition-all"
@@ -136,12 +143,20 @@ export default function AdminLayout({ children }) {
           <span className="text-lg font-bold bg-gradient-to-r from-[#10b981] to-[#3b82f6] bg-clip-text text-transparent">
             LIGA ADMIN
           </span>
-          <button
-            onClick={handleLogout}
-            className="text-xs font-semibold text-red-400 px-3 py-1.5 rounded-lg bg-red-500/10"
-          >
-            Sair
-          </button>
+          <div className="flex gap-2">
+            <Link
+              href="/dashboard"
+              className="text-xs font-semibold text-[#10b981] px-3 py-1.5 rounded-lg bg-[#10b981]/10"
+            >
+              Clube
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="text-xs font-semibold text-red-400 px-3 py-1.5 rounded-lg bg-red-500/10"
+            >
+              Sair
+            </button>
+          </div>
         </header>
 
         {/* Menu Mobile Rápido */}

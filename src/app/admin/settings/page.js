@@ -3,65 +3,127 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 
-const AUCTION_TIME_UNITS = ["Horas", "Minutos", "Dias"];
-
-const TOGGLE_FIELDS = [
-  { label: "Teto Salarial", key: "wage_cap_enabled" },
-  { label: "Negociações", key: "negotiations_enabled" },
-  { label: "Negociação jogador sem contrato", key: "negotiations_no_contract" },
-  { label: "Empréstimo", key: "loan_enabled" },
-  { label: "Troca", key: "trade_enabled" },
-  { label: "Compra na Multa (Roubo)", key: "buyout_enabled" },
-  { label: "Aceitar propostas automaticamente de jogadores à venda", key: "auto_accept_proposals" },
-  { label: "Permitir usuário adicionar jogador no leilão", key: "allow_player_auction" },
-  { label: "Liberar Alteração Patrocínio", key: "allow_sponsor_change" },
-  { label: "Trocar Escudo", key: "allow_shield_change" },
-  { label: "Escudo Repetido", key: "allow_repeated_shield" },
-  { label: "Permitir usuário transferir dinheiro", key: "allow_money_transfer" },
-  { label: "Extrato de dinheiro visível para todos", key: "statement_public" },
-  { label: "Janela de Ajuste Salarial", key: "salary_window_open" },
-  { label: "Demitir Jogador", key: "fire_player_enabled" },
-  { label: "Modificar salário baseado no valor de transferência (Compra)", key: "modify_salary_on_buy" },
-];
-
-const INPUT_STYLE =
-  "w-full bg-[#090d16] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#10b981] transition-colors";
-const SELECT_STYLE =
-  "w-48 bg-[#090d16] border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#10b981] transition-colors";
-
-function FeedbackBanner({ message }) {
-  if (!message.text) return null;
+// ─── Tooltip ℹ️ ────────────────────────────────────────────────────────────
+function Tip({ text }) {
+  const [show, setShow] = useState(false);
   return (
-    <div
-      className={`p-3 rounded-xl border text-sm flex items-center gap-2 transition-all ${
-        message.type === "error"
-          ? "bg-red-500/10 border-red-500/20 text-red-400"
-          : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-      }`}
-    >
-      <span>{message.type === "error" ? "⚠️" : "✅"}</span>
-      {message.text}
+    <span className="relative inline-flex items-center ml-1.5">
+      <button
+        type="button"
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onFocus={() => setShow(true)}
+        onBlur={() => setShow(false)}
+        className="text-[11px] text-gray-600 hover:text-gray-400 transition-colors focus:outline-none"
+        aria-label="Ajuda"
+      >
+        ℹ️
+      </button>
+      {show && (
+        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-[#0d1527] border border-white/10 text-gray-300 text-[11px] leading-relaxed rounded-xl px-3 py-2 shadow-xl z-50 pointer-events-none">
+          {text}
+          <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-[#0d1527]" />
+        </span>
+      )}
+    </span>
+  );
+}
+
+// ─── Feedback inline ───────────────────────────────────────────────────────
+function FeedbackBanner({ msg }) {
+  if (!msg.text) return null;
+  return (
+    <div className={`p-3 rounded-xl border text-sm flex items-center gap-2 ${
+      msg.type === "error"
+        ? "bg-red-500/10 border-red-500/20 text-red-400"
+        : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+    }`}>
+      <span>{msg.type === "error" ? "⚠️" : "✅"}</span>
+      {msg.text}
     </div>
   );
 }
 
+// ─── Estilos base ──────────────────────────────────────────────────────────
+const INPUT = "w-full bg-[#090d16] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#10b981] transition-colors";
+const SELECT = "w-44 bg-[#090d16] border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#10b981] transition-colors flex-shrink-0";
+
+// ─── Linha de toggle ───────────────────────────────────────────────────────
+function ToggleRow({ label, tip, stateKey, toggles, setToggles, options }) {
+  const opts = options || [
+    { value: "true",  label: "✅ Ativado" },
+    { value: "false", label: "❌ Desativado" },
+  ];
+  return (
+    <div className="flex items-center justify-between py-3.5 border-b border-white/5 last:border-0 gap-4">
+      <span className="text-sm text-gray-300 leading-snug flex items-center">
+        {label}
+        {tip && <Tip text={tip} />}
+      </span>
+      <select
+        value={toggles[stateKey]}
+        onChange={(e) => setToggles((p) => ({ ...p, [stateKey]: e.target.value }))}
+        className={SELECT}
+      >
+        {opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+// ─── Linha de input numérico / texto ──────────────────────────────────────
+function InputRow({ label, tip, stateKey, params, setParams, placeholder, type = "number", step, min, suffix, half }) {
+  return (
+    <div className={`space-y-1.5 ${half ? "" : "md:col-span-1"}`}>
+      <label className="text-xs font-semibold text-gray-300 flex items-center">
+        {label}
+        {tip && <Tip text={tip} />}
+        {suffix && <span className="ml-1 text-gray-600 font-normal">{suffix}</span>}
+      </label>
+      <input
+        type={type}
+        step={step}
+        min={min}
+        value={params[stateKey]}
+        onChange={(e) => setParams((p) => ({ ...p, [stateKey]: e.target.value }))}
+        placeholder={placeholder}
+        className={INPUT}
+      />
+    </div>
+  );
+}
+
+// ─── Abas ─────────────────────────────────────────────────────────────────
+const TABS = [
+  { key: "mercado",    label: "🔄 Mercado",    title: "Mercado & Transferências" },
+  { key: "financas",  label: "💰 Finanças",   title: "Configurações Financeiras" },
+  { key: "clube",     label: "🎮 Clube",       title: "Regras do Clube" },
+  { key: "prazos",    label: "⏱️ Prazos",     title: "Prazos & Tempos" },
+  { key: "parametros",label: "🔢 Parâmetros", title: "Parâmetros Gerais" },
+  { key: "perigo",    label: "⚠️ Perigo",     title: "Zona de Perigo" },
+];
+
+// ═══════════════════════════════════════════════════════════════════════════
 export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true);
-  const [savingParams, setSavingParams] = useState(false);
-  const [savingToggles, setSavingToggles] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [purging, setPurging] = useState(false);
   const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
-
-  const [msgParams, setMsgParams] = useState({ text: "", type: "" });
-  const [msgToggles, setMsgToggles] = useState({ text: "", type: "" });
+  const [activeTab, setActiveTab] = useState("mercado");
+  const [msg, setMsg] = useState({ text: "", type: "" });
   const [msgPurge, setMsgPurge] = useState({ text: "", type: "" });
 
-  // --- Parâmetros da Liga ---
+  const showMsg = (text, type = "success") => {
+    setMsg({ text, type });
+    setTimeout(() => setMsg({ text: "", type: "" }), 5000);
+  };
+
+  // ── Estado dos parâmetros ────────────────────────────────────────────────
   const [params, setParams] = useState({
     league_name: "",
     default_budget: "",
     default_wage_cap: "",
-    salary_wage_ratio: "",
+    salary_to_value_ratio: "",
     default_salary: "",
     max_players_per_team: "",
     result_confirm_hours: "",
@@ -70,48 +132,57 @@ export default function AdminSettingsPage() {
     buyout_multiplier: "",
   });
 
-  // --- Toggles ---
-  const [toggles, setToggles] = useState(() => {
-    const init = {};
-    TOGGLE_FIELDS.forEach((f) => { init[f.key] = "true"; });
-    init.salary_payer_loans = "owner";
-    init.fire_player_penalty = "none";
-    return init;
+  // ── Estado dos toggles ───────────────────────────────────────────────────
+  const [toggles, setToggles] = useState({
+    // Mercado
+    negotiations_enabled: "true",
+    negotiations_no_contract: "false",
+    loan_enabled: "true",
+    trade_enabled: "true",
+    buyout_enabled: "true",
+    auto_accept_proposals: "false",
+    allow_player_auction: "true",
+    salary_payer_loans: "owner",
+    // Finanças
+    wage_cap_enabled: "true",
+    statement_public: "false",
+    salary_window_open: "false",
+    modify_salary_on_buy: "false",
+    // Clube
+    allow_shield_change: "true",
+    allow_repeated_shield: "false",
+    allow_sponsor_change: "false",
+    allow_money_transfer: "false",
+    fire_player_enabled: "true",
+    fire_player_penalty: "none",
   });
 
-  const showMsg = (setter, text, type = "success") => {
-    setter({ text, type });
-    setTimeout(() => setter({ text: "", type: "" }), 5000);
-  };
-
+  // ── Carregar configurações ───────────────────────────────────────────────
   const loadSettings = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from("settings").select("*");
-      if (error) throw error;
+      const { data } = await supabase.from("settings").select("*");
       if (data) {
         const map = {};
         data.forEach((item) => { map[item.key] = item.value; });
 
         setParams((prev) => ({
-          league_name: map.league_name ?? prev.league_name,
-          default_budget: map.default_budget ?? prev.default_budget,
-          default_wage_cap: map.default_wage_cap ?? prev.default_wage_cap,
-          salary_wage_ratio: map.salary_wage_ratio ?? prev.salary_wage_ratio,
-          default_salary: map.default_salary ?? prev.default_salary,
-          max_players_per_team: map.max_players_per_team ?? prev.max_players_per_team,
-          result_confirm_hours: map.result_confirm_hours ?? prev.result_confirm_hours,
-          auction_time_value: map.auction_time_value ?? prev.auction_time_value,
-          auction_time_unit: map.auction_time_unit ?? prev.auction_time_unit,
-          buyout_multiplier: map.buyout_multiplier ?? prev.buyout_multiplier,
+          league_name:           map.league_name           ?? prev.league_name,
+          default_budget:        map.default_budget        ?? prev.default_budget,
+          default_wage_cap:      map.default_wage_cap      ?? prev.default_wage_cap,
+          salary_to_value_ratio: map.salary_to_value_ratio ?? prev.salary_to_value_ratio,
+          default_salary:        map.default_salary        ?? prev.default_salary,
+          max_players_per_team:  map.max_players_per_team  ?? prev.max_players_per_team,
+          result_confirm_hours:  map.result_confirm_hours  ?? prev.result_confirm_hours,
+          auction_time_value:    map.auction_time_value    ?? prev.auction_time_value,
+          auction_time_unit:     map.auction_time_unit     ?? prev.auction_time_unit,
+          buyout_multiplier:     map.buyout_multiplier     ?? prev.buyout_multiplier,
         }));
 
         setToggles((prev) => {
           const next = { ...prev };
-          TOGGLE_FIELDS.forEach((f) => {
-            if (map[f.key] !== undefined) next[f.key] = map[f.key];
+          Object.keys(next).forEach((k) => {
+            if (map[k] !== undefined) next[k] = map[k];
           });
-          if (map.salary_payer_loans !== undefined) next.salary_payer_loans = map.salary_payer_loans;
-          if (map.fire_player_penalty !== undefined) next.fire_player_penalty = map.fire_player_penalty;
           return next;
         });
       }
@@ -124,48 +195,33 @@ export default function AdminSettingsPage() {
 
   useEffect(() => { loadSettings(); }, [loadSettings]);
 
-  const handleSaveParams = async (e) => {
-    e.preventDefault();
-    setSavingParams(true);
+  // ── Salvar tudo junto ────────────────────────────────────────────────────
+  const handleSave = async () => {
+    setSaving(true);
     try {
-      const toSave = Object.entries(params).map(([key, value]) => ({ key, value: String(value) }));
-      const { error } = await supabase.from("settings").upsert(toSave, { onConflict: "key" });
+      const all = [
+        ...Object.entries(params).map(([key, value]) => ({ key, value: String(value) })),
+        ...Object.entries(toggles).map(([key, value]) => ({ key, value: String(value) })),
+      ];
+      const { error } = await supabase.from("settings").upsert(all, { onConflict: "key" });
       if (error) throw error;
-      showMsg(setMsgParams, "Parâmetros salvos com sucesso!");
+      showMsg("Configurações salvas com sucesso!");
     } catch (err) {
-      showMsg(setMsgParams, err.message || "Erro ao salvar parâmetros.", "error");
+      showMsg(err.message || "Erro ao salvar.", "error");
     } finally {
-      setSavingParams(false);
+      setSaving(false);
     }
   };
 
-  const handleSaveToggles = async (e) => {
-    e.preventDefault();
-    setSavingToggles(true);
-    try {
-      const toSave = Object.entries(toggles).map(([key, value]) => ({ key, value: String(value) }));
-      const { error } = await supabase.from("settings").upsert(toSave, { onConflict: "key" });
-      if (error) throw error;
-      showMsg(setMsgToggles, "Configurações de toggles salvas!");
-    } catch (err) {
-      showMsg(setMsgToggles, err.message || "Erro ao salvar toggles.", "error");
-    } finally {
-      setSavingToggles(false);
-    }
-  };
-
-  const handlePurgeFreeAgents = async () => {
+  // ── Purgar agentes livres ─────────────────────────────────────────────────
+  const handlePurge = async () => {
     setPurging(true);
     try {
       const { data, error } = await supabase.rpc("purge_free_agents");
       if (error) throw error;
-      if (data && data.success) {
-        showMsg(setMsgPurge, data.message || "Jogadores livres purgados!");
-      } else {
-        showMsg(setMsgPurge, data?.message || "Erro desconhecido ao purgar.", "error");
-      }
+      setMsgPurge({ text: data?.message || "Jogadores livres purgados!", type: "success" });
     } catch (err) {
-      showMsg(setMsgPurge, "Erro ao purgar: " + err.message, "error");
+      setMsgPurge({ text: "Erro ao purgar: " + err.message, type: "error" });
     } finally {
       setPurging(false);
       setShowPurgeConfirm(false);
@@ -180,124 +236,203 @@ export default function AdminSettingsPage() {
     );
   }
 
-  return (
-    <div className="space-y-8 max-w-5xl">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-          Configurações Globais da Liga
-        </h1>
-        <p className="mt-1 text-sm text-gray-400">
-          Ajuste parâmetros, regras e funcionalidades da liga.
-        </p>
-      </div>
+  const activeTabData = TABS.find((t) => t.key === activeTab);
 
-      {/* ===== SEÇÃO 1: Parâmetros da Liga ===== */}
-      <div className="glass-panel rounded-2xl border border-white/5 bg-[#090d16]/75 p-6 sm:p-8 space-y-6">
-        <div className="border-b border-white/5 pb-4">
-          <h2 className="text-lg font-bold text-white">Parâmetros da Liga</h2>
-          <p className="text-xs text-gray-400 mt-1">
-            Defina valores padrão usados nas regras gerais da competição.
+  return (
+    <div className="space-y-6 max-w-4xl">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-white">Configurações da Liga</h1>
+          <p className="mt-1 text-sm text-gray-400">
+            Passe o mouse no <span className="text-gray-500">ℹ️</span> de cada opção para entender o que ela faz.
           </p>
         </div>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="rounded-xl bg-[#10b981] hover:bg-[#059669] px-5 py-2.5 text-sm font-bold text-white shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 whitespace-nowrap"
+        >
+          {saving ? "Salvando..." : "💾 Salvar Tudo"}
+        </button>
+      </div>
 
-        <FeedbackBanner message={msgParams} />
+      <FeedbackBanner msg={msg} />
 
-        <form onSubmit={handleSaveParams} className="space-y-6">
+      {/* Abas */}
+      <div className="flex gap-1 overflow-x-auto pb-1 border-b border-white/5">
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`flex-shrink-0 px-4 py-2.5 rounded-t-xl text-xs font-bold transition-all ${
+              activeTab === tab.key
+                ? "bg-[#090d16]/75 text-white border border-white/10 border-b-[#090d16]/75 -mb-px"
+                : "text-gray-500 hover:text-gray-300"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Painel da aba */}
+      <div className="glass-panel rounded-2xl border border-white/5 bg-[#090d16]/75 p-6 sm:p-8">
+        <div className="border-b border-white/5 pb-4 mb-6">
+          <h2 className="text-base font-bold text-white">{activeTabData?.title}</h2>
+        </div>
+
+        {/* ── ABA: MERCADO ─────────────────────────────────────────────── */}
+        {activeTab === "mercado" && (
+          <div className="space-y-0">
+            <ToggleRow
+              label="Negociações entre times"
+              tip="Quando ativado, os times podem enviar e receber propostas de compra/venda de jogadores entre si."
+              stateKey="negotiations_enabled"
+              toggles={toggles} setToggles={setToggles}
+            />
+            <ToggleRow
+              label="Negociar jogador sem contrato"
+              tip="Permite que times façam propostas por jogadores que estão na lista de agentes livres (sem time)."
+              stateKey="negotiations_no_contract"
+              toggles={toggles} setToggles={setToggles}
+            />
+            <ToggleRow
+              label="Empréstimo de jogadores"
+              tip="Times podem ceder jogadores temporariamente para outro time por uma temporada."
+              stateKey="loan_enabled"
+              toggles={toggles} setToggles={setToggles}
+            />
+            <ToggleRow
+              label="Troca de jogadores"
+              tip="Permite que dois times troquem jogadores diretamente entre si, com ou sem compensação financeira."
+              stateKey="trade_enabled"
+              toggles={toggles} setToggles={setToggles}
+            />
+            <ToggleRow
+              label="Compra via Multa Rescisória"
+              tip='Qualquer time pode "roubar" um jogador de outro pagando a multa rescisória definida. O time vendedor não pode recusar.'
+              stateKey="buyout_enabled"
+              toggles={toggles} setToggles={setToggles}
+            />
+            <ToggleRow
+              label="Aceitar propostas automaticamente"
+              tip="Jogadores colocados à venda têm suas propostas aceitas automaticamente se o valor for atingido."
+              stateKey="auto_accept_proposals"
+              toggles={toggles} setToggles={setToggles}
+            />
+            <ToggleRow
+              label="Times podem enviar jogadores ao leilão"
+              tip="Quando ativado, o dono do time pode marcar jogadores para o leilão. O admin ainda precisa abrir o leilão."
+              stateKey="allow_player_auction"
+              toggles={toggles} setToggles={setToggles}
+            />
+            <ToggleRow
+              label="Quem paga o salário do emprestado?"
+              tip="Define se o salário do jogador em empréstimo é debitado do time dono ou do time que o recebeu."
+              stateKey="salary_payer_loans"
+              toggles={toggles} setToggles={setToggles}
+              options={[
+                { value: "owner",     label: "🏠 Time Dono" },
+                { value: "loan_team", label: "🔁 Time Tomador" },
+              ]}
+            />
+          </div>
+        )}
+
+        {/* ── ABA: FINANÇAS ────────────────────────────────────────────── */}
+        {activeTab === "financas" && (
+          <div className="space-y-0">
+            <ToggleRow
+              label="Teto Salarial"
+              tip="Ativa o limite máximo de folha salarial por time. Times não podem contratar se ultrapassar o teto."
+              stateKey="wage_cap_enabled"
+              toggles={toggles} setToggles={setToggles}
+            />
+            <ToggleRow
+              label="Janela de Ajuste Salarial"
+              tip="Quando aberta, os donos dos times podem ajustar livremente o salário dos seus jogadores sem precisar do admin."
+              stateKey="salary_window_open"
+              toggles={toggles} setToggles={setToggles}
+            />
+            <ToggleRow
+              label="Modificar salário na compra"
+              tip="Quando um time compra um jogador, o salário é recalculado automaticamente com base no valor de transferência."
+              stateKey="modify_salary_on_buy"
+              toggles={toggles} setToggles={setToggles}
+            />
+            <ToggleRow
+              label="Extrato financeiro público"
+              tip="Se ativado, qualquer participante pode ver o extrato de receitas e despesas de todos os times."
+              stateKey="statement_public"
+              toggles={toggles} setToggles={setToggles}
+            />
+            <ToggleRow
+              label="Permitir transferência de dinheiro"
+              tip="Times podem transferir saldo diretamente para outros times (ex: como parte de uma negociação manual)."
+              stateKey="allow_money_transfer"
+              toggles={toggles} setToggles={setToggles}
+            />
+          </div>
+        )}
+
+        {/* ── ABA: CLUBE ───────────────────────────────────────────────── */}
+        {activeTab === "clube" && (
+          <div className="space-y-0">
+            <ToggleRow
+              label="Trocar Escudo do Time"
+              tip="Permite que o dono do time faça upload de uma nova imagem de escudo pelo painel do clube."
+              stateKey="allow_shield_change"
+              toggles={toggles} setToggles={setToggles}
+            />
+            <ToggleRow
+              label="Escudo Repetido"
+              tip="Quando desativado, dois times não podem ter o mesmo escudo. Útil para evitar duplicatas."
+              stateKey="allow_repeated_shield"
+              toggles={toggles} setToggles={setToggles}
+            />
+            <ToggleRow
+              label="Alterar Patrocínio"
+              tip="Permite que o time troque o patrocinador ativo pelo painel. Se desativado, apenas o admin pode alterar."
+              stateKey="allow_sponsor_change"
+              toggles={toggles} setToggles={setToggles}
+            />
+            <ToggleRow
+              label="Demitir Jogador"
+              tip="Permite que o dono do time dispense jogadores do elenco pelo painel. Jogadores dispensados viram agentes livres."
+              stateKey="fire_player_enabled"
+              toggles={toggles} setToggles={setToggles}
+            />
+            <ToggleRow
+              label="Consequência ao Demitir"
+              tip="Define se há penalidade financeira (multa para o time) ou benefício (bônus ao jogador) quando um time demite um jogador."
+              stateKey="fire_player_penalty"
+              toggles={toggles} setToggles={setToggles}
+              options={[
+                { value: "none",    label: "— Sem consequência" },
+                { value: "penalty", label: "💸 Multa para o time" },
+                { value: "bonus",   label: "🎁 Bônus ao jogador" },
+              ]}
+            />
+          </div>
+        )}
+
+        {/* ── ABA: PRAZOS ──────────────────────────────────────────────── */}
+        {activeTab === "prazos" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* Nome da Liga */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-300">Nome Oficial da Liga</label>
-              <input
-                type="text"
-                value={params.league_name}
-                onChange={(e) => setParams((p) => ({ ...p, league_name: e.target.value }))}
-                placeholder="Ex: Liga Master EA FC 26"
-                className={INPUT_STYLE}
-              />
-            </div>
-
-            {/* Orçamento Padrão */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-300">Orçamento Padrão para Novos Times (R$)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={params.default_budget}
-                onChange={(e) => setParams((p) => ({ ...p, default_budget: e.target.value }))}
-                placeholder="Ex: 50000000.00"
-                className={INPUT_STYLE}
-              />
-            </div>
-
-            {/* Teto Salarial */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-300">Teto Salarial Padrão (R$)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={params.default_wage_cap}
-                onChange={(e) => setParams((p) => ({ ...p, default_wage_cap: e.target.value }))}
-                placeholder="Ex: 15000.00"
-                className={INPUT_STYLE}
-              />
-            </div>
-
-            {/* Relação Salário/Passe */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-300">Relação Salário/Passe (multiplicador)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={params.salary_wage_ratio}
-                onChange={(e) => setParams((p) => ({ ...p, salary_wage_ratio: e.target.value }))}
-                placeholder="Ex: 20"
-                className={INPUT_STYLE}
-              />
-            </div>
-
-            {/* Salário Default */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-300">Salário Default (R$)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={params.default_salary}
-                onChange={(e) => setParams((p) => ({ ...p, default_salary: e.target.value }))}
-                placeholder="Ex: 200"
-                className={INPUT_STYLE}
-              />
-            </div>
-
-            {/* Máximo de jogadores */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-300">Nº máx. de jogadores por equipe (0 = desativado)</label>
-              <input
-                type="number"
-                min="0"
-                value={params.max_players_per_team}
-                onChange={(e) => setParams((p) => ({ ...p, max_players_per_team: e.target.value }))}
-                placeholder="Ex: 26"
-                className={INPUT_STYLE}
-              />
-            </div>
-
-            {/* Horas para confirmação */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-300">Horas para confirmação automática do resultado</label>
-              <input
-                type="number"
-                min="0"
-                value={params.result_confirm_hours}
-                onChange={(e) => setParams((p) => ({ ...p, result_confirm_hours: e.target.value }))}
-                placeholder="Ex: 24"
-                className={INPUT_STYLE}
-              />
-            </div>
-
-            {/* Tempo para Finalizar Leilão */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-300">Tempo para Finalizar Leilão</label>
+            <InputRow
+              label="Confirmação automática de resultado"
+              tip="Horas que um time tem para contestar um resultado. Após esse prazo, o resultado é confirmado automaticamente."
+              stateKey="result_confirm_hours"
+              params={params} setParams={setParams}
+              placeholder="Ex: 24"
+              suffix="horas"
+            />
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-300 flex items-center">
+                Tempo para finalizar leilão
+                <Tip text="Quanto tempo um lance pode ficar sem ser superado antes do leilão ser finalizado automaticamente." />
+              </label>
               <div className="flex gap-2">
                 <input
                   type="number"
@@ -310,162 +445,137 @@ export default function AdminSettingsPage() {
                 <select
                   value={params.auction_time_unit}
                   onChange={(e) => setParams((p) => ({ ...p, auction_time_unit: e.target.value }))}
-                  className="w-32 bg-[#090d16] border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#10b981] transition-colors"
+                  className="w-28 bg-[#090d16] border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#10b981] transition-colors"
                 >
-                  {AUCTION_TIME_UNITS.map((u) => (
-                    <option key={u} value={u}>{u}</option>
-                  ))}
+                  {["Minutos", "Horas", "Dias"].map((u) => <option key={u} value={u}>{u}</option>)}
                 </select>
               </div>
             </div>
+          </div>
+        )}
 
-            {/* Multiplicador Multa */}
-            <div className="space-y-1 md:col-span-2">
-              <label className="text-xs font-semibold text-gray-300">Multiplicador da Multa Rescisória</label>
-              <input
-                type="number"
-                step="0.01"
-                value={params.buyout_multiplier}
-                onChange={(e) => setParams((p) => ({ ...p, buyout_multiplier: e.target.value }))}
-                placeholder="Ex: 1.50"
-                className="w-full md:w-1/2 bg-[#090d16] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#10b981] transition-colors"
-              />
+        {/* ── ABA: PARÂMETROS ──────────────────────────────────────────── */}
+        {activeTab === "parametros" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <InputRow
+              label="Nome Oficial da Liga"
+              tip="Nome exibido no cabeçalho do painel e nas notícias geradas automaticamente."
+              stateKey="league_name"
+              params={params} setParams={setParams}
+              placeholder="Ex: Liga Master EA FC 26"
+              type="text"
+            />
+            <InputRow
+              label="Orçamento padrão de novos times"
+              tip="Saldo inicial que todo time recebe ao se cadastrar na liga. Pode ser ajustado individualmente em Usuários & Times."
+              stateKey="default_budget"
+              params={params} setParams={setParams}
+              placeholder="Ex: 50000000"
+              suffix="R$" step="0.01"
+            />
+            <InputRow
+              label="Teto Salarial padrão"
+              tip="Limite máximo de folha salarial que cada time pode ter. Times com teto cheio não conseguem contratar."
+              stateKey="default_wage_cap"
+              params={params} setParams={setParams}
+              placeholder="Ex: 15000"
+              suffix="R$/mês" step="0.01"
+            />
+            <InputRow
+              label="Salário padrão de jogadores"
+              tip="Salário inicial atribuído a jogadores recém-importados sem salário definido."
+              stateKey="default_salary"
+              params={params} setParams={setParams}
+              placeholder="Ex: 200"
+              suffix="R$/mês" step="0.01"
+            />
+            <InputRow
+              label="Ratio Salário → Passe"
+              tip="Multiplicador usado para calcular o valor de mercado (passe) a partir do salário. Ex: salário R$1.000 × 20 = passe R$20.000."
+              stateKey="salary_to_value_ratio"
+              params={params} setParams={setParams}
+              placeholder="Ex: 20"
+              suffix="×" step="0.01"
+            />
+            <InputRow
+              label="Máximo de jogadores por time"
+              tip="Limite de jogadores no elenco. Times não conseguem contratar além desse limite. Use 0 para desativar o limite."
+              stateKey="max_players_per_team"
+              params={params} setParams={setParams}
+              placeholder="Ex: 26 (0 = sem limite)"
+              min="0"
+            />
+            <InputRow
+              label="Multiplicador da Multa Rescisória"
+              tip="A multa rescisória de um jogador é calculada como: passe × multiplicador. Ex: passe R$100k × 1.5 = multa R$150k."
+              stateKey="buyout_multiplier"
+              params={params} setParams={setParams}
+              placeholder="Ex: 1.5"
+              suffix="×" step="0.01"
+            />
+          </div>
+        )}
+
+        {/* ── ABA: PERIGO ──────────────────────────────────────────────── */}
+        {activeTab === "perigo" && (
+          <div className="space-y-4">
+            <div className="p-4 rounded-xl bg-red-500/5 border border-red-500/20 text-sm text-red-300 flex items-start gap-3">
+              <span className="text-lg flex-shrink-0">⚠️</span>
+              <p>As ações abaixo são <strong>irreversíveis</strong>. Leia com atenção antes de confirmar.</p>
             </div>
-          </div>
 
-          <div className="flex justify-end pt-2">
-            <button
-              type="submit"
-              disabled={savingParams}
-              className="rounded-xl bg-[#10b981] hover:bg-[#059669] px-6 py-2.5 text-xs font-bold text-white shadow-lg transition-all active:scale-[0.98] disabled:opacity-50"
-            >
-              {savingParams ? "Salvando..." : "Salvar Parâmetros"}
-            </button>
-          </div>
-        </form>
-      </div>
+            <FeedbackBanner msg={msgPurge} />
 
-      {/* ===== SEÇÃO 2: Toggles ===== */}
-      <div className="glass-panel rounded-2xl border border-white/5 bg-[#090d16]/75 p-6 sm:p-8 space-y-6">
-        <div className="border-b border-white/5 pb-4">
-          <h2 className="text-lg font-bold text-white">Funcionalidades da Liga</h2>
-          <p className="text-xs text-gray-400 mt-1">
-            Ative ou desative cada funcionalidade individualmente.
-          </p>
-        </div>
-
-        <FeedbackBanner message={msgToggles} />
-
-        <form onSubmit={handleSaveToggles} className="space-y-6">
-          {/* Grid de toggles booleanos */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
-            {TOGGLE_FIELDS.map((field, idx) => (
-              <div
-                key={field.key}
-                className={`flex justify-between items-center py-3 border-b border-white/5 ${
-                  idx === TOGGLE_FIELDS.length - 1 || idx === TOGGLE_FIELDS.length - 2
-                    ? "md:border-b-0"
-                    : ""
-                }`}
-              >
-                <span className="text-sm text-gray-300 pr-4 leading-snug">{field.label}</span>
-                <select
-                  value={toggles[field.key]}
-                  onChange={(e) =>
-                    setToggles((prev) => ({ ...prev, [field.key]: e.target.value }))
-                  }
-                  className={SELECT_STYLE}
-                >
-                  <option value="true">✅ Ativado</option>
-                  <option value="false">❌ Desativado</option>
-                </select>
+            <div className="p-5 rounded-xl border border-red-500/20 bg-red-500/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-white flex items-center gap-2">
+                  🗑️ Purgar Jogadores Livres
+                  <Tip text="Remove permanentemente todos os jogadores sem time (agentes livres) e cancela seus leilões ativos. Use antes de uma nova importação." />
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Apaga todos os agentes livres e seus leilões ativos do banco de dados.
+                </p>
               </div>
-            ))}
-          </div>
-
-          {/* Selects especiais */}
-          <div className="border-t border-white/5 pt-4 space-y-1">
-            <h3 className="text-sm font-semibold text-gray-300 mb-3">Configurações Especiais</h3>
-
-            <div className="flex justify-between items-center py-3 border-b border-white/5">
-              <span className="text-sm text-gray-300">Quem paga o salário dos jogadores emprestados?</span>
-              <select
-                value={toggles.salary_payer_loans}
-                onChange={(e) => setToggles((prev) => ({ ...prev, salary_payer_loans: e.target.value }))}
-                className={SELECT_STYLE}
-              >
-                <option value="owner">Dono do Jogador</option>
-                <option value="loan_team">Time Tomador</option>
-              </select>
-            </div>
-
-            <div className="flex justify-between items-center py-3">
-              <span className="text-sm text-gray-300">Multa/Bônus ao Demitir Jogador</span>
-              <select
-                value={toggles.fire_player_penalty}
-                onChange={(e) => setToggles((prev) => ({ ...prev, fire_player_penalty: e.target.value }))}
-                className={SELECT_STYLE}
-              >
-                <option value="none">Nenhuma ação</option>
-                <option value="penalty">Multa</option>
-                <option value="bonus">Bônus</option>
-              </select>
+              {!showPurgeConfirm ? (
+                <button
+                  onClick={() => setShowPurgeConfirm(true)}
+                  className="rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 px-5 py-2.5 text-xs font-bold text-red-400 transition-all whitespace-nowrap self-start sm:self-center"
+                >
+                  Purgar Jogadores
+                </button>
+              ) : (
+                <div className="flex gap-2 self-start sm:self-center">
+                  <button
+                    onClick={handlePurge}
+                    disabled={purging}
+                    className="rounded-xl bg-red-500 hover:bg-red-600 px-5 py-2.5 text-xs font-bold text-white transition-all disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {purging ? "Purgando..." : "✓ Confirmar"}
+                  </button>
+                  <button
+                    onClick={() => setShowPurgeConfirm(false)}
+                    className="rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-2.5 text-xs font-bold text-gray-300 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              )}
             </div>
           </div>
+        )}
 
-          <div className="flex justify-end pt-2">
+        {/* Botão Salvar fixo no rodapé do painel (exceto aba Perigo) */}
+        {activeTab !== "perigo" && (
+          <div className="flex justify-end pt-6 border-t border-white/5 mt-6">
             <button
-              type="submit"
-              disabled={savingToggles}
-              className="rounded-xl bg-[#3b82f6] hover:bg-[#2563eb] px-6 py-2.5 text-xs font-bold text-white shadow-lg transition-all active:scale-[0.98] disabled:opacity-50"
+              onClick={handleSave}
+              disabled={saving}
+              className="rounded-xl bg-[#10b981] hover:bg-[#059669] px-6 py-2.5 text-sm font-bold text-white shadow transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
             >
-              {savingToggles ? "Salvando..." : "Salvar Funcionalidades"}
+              {saving ? "Salvando..." : "💾 Salvar"}
             </button>
           </div>
-        </form>
-      </div>
-
-      {/* ===== ZONA DE PERIGO ===== */}
-      <div className="glass-panel rounded-2xl border border-red-500/20 bg-[#090d16]/75 p-6 sm:p-8 space-y-4">
-        <div className="border-b border-red-500/10 pb-4">
-          <h2 className="text-lg font-bold text-red-400">⚠️ Zona de Perigo</h2>
-          <p className="text-xs text-gray-400 mt-1">Ações críticas e irreversíveis sobre a base de dados.</p>
-        </div>
-
-        <FeedbackBanner message={msgPurge} />
-
-        <div className="p-4 rounded-xl border border-red-500/20 bg-red-500/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold text-white">Purgar Jogadores Livres</p>
-            <p className="text-xs text-gray-400 mt-0.5">
-              Apaga todos os jogadores sem time associado (agentes livres) e seus leilões ativos. Irreversível.
-            </p>
-          </div>
-          {!showPurgeConfirm ? (
-            <button
-              onClick={() => setShowPurgeConfirm(true)}
-              className="rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 px-5 py-2.5 text-xs font-bold text-red-400 transition-all active:scale-[0.98] whitespace-nowrap self-start sm:self-center"
-            >
-              Purgar Jogadores
-            </button>
-          ) : (
-            <div className="flex gap-2 self-start sm:self-center">
-              <button
-                onClick={handlePurgeFreeAgents}
-                disabled={purging}
-                className="rounded-xl bg-red-500 hover:bg-red-600 px-5 py-2.5 text-xs font-bold text-white transition-all active:scale-[0.98] disabled:opacity-50 whitespace-nowrap"
-              >
-                {purging ? "Purgando..." : "Confirmar Purga"}
-              </button>
-              <button
-                onClick={() => setShowPurgeConfirm(false)}
-                className="rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-2.5 text-xs font-bold text-gray-300 transition-all"
-              >
-                Cancelar
-              </button>
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );

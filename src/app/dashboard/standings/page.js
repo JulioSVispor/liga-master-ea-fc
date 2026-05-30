@@ -138,7 +138,7 @@ export default function StandingsPage() {
         .select(`
           player_id,
           players!player_id(name, common_name, rating, position, face_url),
-          teams!team_id(name, real_club_name),
+          teams!team_id(id, name, real_club_name),
           matches!match_id(league_id, status)
         `)
         .eq("event_type", "goal")
@@ -172,7 +172,7 @@ export default function StandingsPage() {
         .select(`
           player_id,
           players!player_id(name, common_name, rating, position, face_url),
-          teams!team_id(name, real_club_name),
+          teams!team_id(id, name, real_club_name),
           matches!match_id(league_id, status)
         `)
         .eq("event_type", "assist")
@@ -203,7 +203,7 @@ export default function StandingsPage() {
         .from("matches")
         .select(`
           motm_player_id,
-          player:players!motm_player_id(name, common_name, rating, position, face_url, teams!team_id(name, real_club_name))
+          player:players!motm_player_id(name, common_name, rating, position, face_url, teams!team_id(id, name, real_club_name))
         `)
         .eq("league_id", leagueId)
         .eq("status", "confirmed")
@@ -476,8 +476,21 @@ export default function StandingsPage() {
                         </div>
                       </td>
                       <td className="py-3 px-4 text-gray-400 text-sm">
-                        <p className="font-semibold text-gray-200">{item.team?.name}</p>
-                        <p className="text-[10px] text-gray-500">{item.team?.real_club_name}</p>
+                        {item.team ? (
+                          <button
+                            onClick={() => handleViewTeamRoster(item.team)}
+                            className="text-left group hover:text-[#10b981] transition-all focus:outline-none"
+                            title="Clique para ver o elenco e tática deste time"
+                          >
+                            <p className="font-semibold text-gray-200 group-hover:text-[#10b981] transition-colors">{item.team.name}</p>
+                            <p className="text-[10px] text-gray-500 group-hover:text-emerald-400/80 transition-colors">{item.team.real_club_name}</p>
+                          </button>
+                        ) : (
+                          <>
+                            <p className="font-semibold text-gray-200">Sem Clube</p>
+                            <p className="text-[10px] text-gray-500">—</p>
+                          </>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-center font-extrabold text-emerald-400 text-lg">{item.goals}</td>
                     </tr>
@@ -524,8 +537,21 @@ export default function StandingsPage() {
                         </div>
                       </td>
                       <td className="py-3 px-4 text-gray-400 text-sm">
-                        <p className="font-semibold text-gray-200">{item.team?.name}</p>
-                        <p className="text-[10px] text-gray-500">{item.team?.real_club_name}</p>
+                        {item.team ? (
+                          <button
+                            onClick={() => handleViewTeamRoster(item.team)}
+                            className="text-left group hover:text-[#10b981] transition-all focus:outline-none"
+                            title="Clique para ver o elenco e tática deste time"
+                          >
+                            <p className="font-semibold text-gray-200 group-hover:text-[#10b981] transition-colors">{item.team.name}</p>
+                            <p className="text-[10px] text-gray-500 group-hover:text-emerald-400/80 transition-colors">{item.team.real_club_name}</p>
+                          </button>
+                        ) : (
+                          <>
+                            <p className="font-semibold text-gray-200">Sem Clube</p>
+                            <p className="text-[10px] text-gray-500">—</p>
+                          </>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-center font-extrabold text-[#3b82f6] text-lg">{item.assists}</td>
                     </tr>
@@ -571,10 +597,23 @@ export default function StandingsPage() {
                            </div>
                          </div>
                        </td>
-                       <td className="py-3 px-4 text-gray-400 text-sm">
-                         <p className="font-semibold text-gray-200">{item.team?.name || "Sem Clube"}</p>
-                         <p className="text-[10px] text-gray-500">{item.team?.real_club_name || "—"}</p>
-                       </td>
+                        <td className="py-3 px-4 text-gray-400 text-sm">
+                          {item.team ? (
+                            <button
+                              onClick={() => handleViewTeamRoster(item.team)}
+                              className="text-left group hover:text-[#10b981] transition-all focus:outline-none"
+                              title="Clique para ver o elenco e tática deste time"
+                            >
+                              <p className="font-semibold text-gray-200 group-hover:text-[#10b981] transition-colors">{item.team.name}</p>
+                              <p className="text-[10px] text-gray-500 group-hover:text-emerald-400/80 transition-colors">{item.team.real_club_name}</p>
+                            </button>
+                          ) : (
+                            <>
+                              <p className="font-semibold text-gray-200">Sem Clube</p>
+                              <p className="text-[10px] text-gray-500">—</p>
+                            </>
+                          )}
+                        </td>
                        <td className="py-3 px-4 text-center font-extrabold text-amber-400 text-lg">{item.motm}</td>
                      </tr>
                    ))}

@@ -27,6 +27,286 @@ export default function MatchesPage() {
 
   const [alert, setAlert] = useState(null);
 
+  // Estados para visualizar elenco e formação de outro time
+  const [viewingTeam, setViewingTeam] = useState(null);
+  const [viewingPlayers, setViewingPlayers] = useState([]);
+  const [viewingCoach, setViewingCoach] = useState(null);
+  const [viewingLoading, setViewingLoading] = useState(false);
+
+  // Retrospecto de Clássicos (H2H)
+  const [allTeams, setAllTeams] = useState([]);
+  const [selectedOpponentId, setSelectedOpponentId] = useState("");
+  const [h2hMatches, setH2hMatches] = useState([]);
+  const [h2hLoading, setH2hLoading] = useState(false);
+
+  const loadH2hMatches = async (oppId) => {
+    if (!oppId || !myTeam) return;
+    setH2hLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("matches")
+        .select(`
+          *,
+          home_team:teams!home_team_id(*),
+          away_team:teams!away_team_id(*),
+          seasons!season_id(name)
+        `)
+        .or(`and(home_team_id.eq.${myTeam.id},away_team_id.eq.${oppId}),and(home_team_id.eq.${oppId},away_team_id.eq.${myTeam.id})`)
+        .eq("status", "confirmed")
+        .order("created_at", { ascending: false });
+
+      if (!error && data) {
+        setH2hMatches(data);
+      } else {
+        setH2hMatches([]);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar retrospecto:", err);
+      setH2hMatches([]);
+    } finally {
+      setH2hLoading(false);
+    }
+  };
+
+  const calculateH2hStats = () => {
+    let myWins = 0;
+    let oppWins = 0;
+    let draws = 0;
+    let myGols = 0;
+    let oppGols = 0;
+
+    h2hMatches.forEach((m) => {
+      const isHome = m.home_team_id === myTeam.id;
+      const homeScore = parseInt(m.home_score || 0);
+      const awayScore = parseInt(m.away_score || 0);
+
+      myGols += isHome ? homeScore : awayScore;
+      oppGols += isHome ? awayScore : homeScore;
+
+      if (homeScore === awayScore) {
+        draws++;
+      } else if (homeScore > awayScore) {
+        if (isHome) myWins++;
+        else oppWins++;
+      } else {
+        if (isHome) oppWins++;
+        else myWins++;
+      }
+    });
+
+    return { myWins, oppWins, draws, myGols, oppGols };
+  };
+
+  const handleViewTeamRoster = async (team) => {
+    if (!team) return;
+    setViewingTeam(team);
+    setViewingLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("players")
+        .select("*")
+        .eq("team_id", team.id)
+        .order("rating", { ascending: false });
+
+      if (!error && data) {
+        setViewingPlayers(data);
+      } else {
+        setViewingPlayers([]);
+      }
+
+      if (team.user_id) {
+        const { data: coachProfile } = await supabase
+          .from("profiles")
+          .select("display_name, email")
+          .eq("id", team.user_id)
+          .single();
+        setViewingCoach(coachProfile || null);
+      } else {
+        setViewingCoach(null);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar elenco do time:", err);
+      setViewingPlayers([]);
+      setViewingCoach(null);
+    } finally {
+      setViewingLoading(false);
+    }
+  };
+
+  const getViewingFormationSlots = (team, playersList) => {
+    if (!team || !playersList) return [];
+    const sortedPlayers = [...playersList].sort((a, b) => b.rating - a.rating);
+
+    const attackPositions = ["ST", "CF", "LF", "RF", "LW", "RW"];
+    const midfieldPositions = ["CM", "CDM", "CAM", "LM", "RM", "LCM", "RCM", "LDM", "RDM", "LAM", "RAM"];
+    const defensePositions = ["CB", "RCB", "LCB", "LB", "RB", "LWB", "RWB", "SW"];
+
+    const gksPool = sortedPlayers.filter((p) => p.position === "GK");
+    const defsPool = sortedPlayers.filter((p) => defensePositions.includes(p.position));
+    const midsPool = sortedPlayers.filter((p) => midfieldPositions.includes(p.position));
+    const attsPool = sortedPlayers.filter((p) => attackPositions.includes(p.position));
+
+    const assignedIds = new Set();
+
+    const assignFromPool = (pool, count) => {
+      const selected = [];
+      for (const p of pool) {
+        if (!assignedIds.has(p.id)) {
+          selected.push(p);
+          assignedIds.add(p.id);
+          if (selected.length === count) break;
+        }
+      }
+      return selected;
+    };
+
+    let slots = [];
+    const formation = team.formation || "4-3-3";
+
+    if (formation === "4-4-2") {
+      slots = [
+        { role: "GK", title: "GK", x: 50, y: 88 },
+        { role: "DEF", title: "LE", x: 15, y: 70 },
+        { role: "DEF", title: "ZAG", x: 38, y: 72 },
+        { role: "DEF", title: "ZAG", x: 62, y: 72 },
+        { role: "DEF", title: "LD", x: 85, y: 70 },
+        { role: "MID", title: "ME", x: 15, y: 46 },
+        { role: "MID", title: "MC", x: 38, y: 48 },
+        { role: "MID", title: "MC", x: 62, y: 48 },
+        { role: "MID", title: "MD", x: 85, y: 46 },
+        { role: "ATT", title: "ATA", x: 35, y: 15 },
+        { role: "ATT", title: "ATA", x: 65, y: 15 },
+      ];
+    } else if (formation === "3-5-2") {
+      slots = [
+        { role: "GK", title: "GK", x: 50, y: 88 },
+        { role: "DEF", title: "ZAE", x: 25, y: 72 },
+        { role: "DEF", title: "ZAG", x: 50, y: 74 },
+        { role: "DEF", title: "ZAD", x: 75, y: 72 },
+        { role: "MID", title: "VOL", x: 35, y: 54 },
+        { role: "MID", title: "VOL", x: 65, y: 54 },
+        { role: "MID", title: "ME", x: 12, y: 40 },
+        { role: "MID", title: "MEI", x: 50, y: 34 },
+        { role: "MID", title: "MD", x: 88, y: 40 },
+        { role: "ATT", title: "ATA", x: 35, y: 14 },
+        { role: "ATT", title: "ATA", x: 65, y: 14 },
+      ];
+    } else if (formation === "4-2-3-1") {
+      slots = [
+        { role: "GK", title: "GK", x: 50, y: 88 },
+        { role: "DEF", title: "LE", x: 15, y: 70 },
+        { role: "DEF", title: "ZAG", x: 38, y: 72 },
+        { role: "DEF", title: "ZAG", x: 62, y: 72 },
+        { role: "DEF", title: "LD", x: 85, y: 70 },
+        { role: "MID", title: "VOL", x: 35, y: 52 },
+        { role: "MID", title: "VOL", x: 65, y: 52 },
+        { role: "MID", title: "ME", x: 18, y: 32 },
+        { role: "MID", title: "MEI", x: 50, y: 28 },
+        { role: "MID", title: "MD", x: 82, y: 32 },
+        { role: "ATT", title: "ATA", x: 50, y: 10 },
+      ];
+    } else if (formation === "3-4-3") {
+      slots = [
+        { role: "GK", title: "GK", x: 50, y: 88 },
+        { role: "DEF", title: "ZAE", x: 25, y: 72 },
+        { role: "DEF", title: "ZAG", x: 50, y: 74 },
+        { role: "DEF", title: "ZAD", x: 75, y: 72 },
+        { role: "MID", title: "ME", x: 12, y: 48 },
+        { role: "MID", title: "MC", x: 38, y: 50 },
+        { role: "MID", title: "MC", x: 62, y: 50 },
+        { role: "MID", title: "MD", x: 88, y: 48 },
+        { role: "ATT", title: "PE", x: 20, y: 18 },
+        { role: "ATT", title: "ATA", x: 50, y: 12 },
+        { role: "ATT", title: "PD", x: 80, y: 18 },
+      ];
+    } else if (formation === "5-3-2") {
+      slots = [
+        { role: "GK", title: "GK", x: 50, y: 88 },
+        { role: "DEF", title: "LWE", x: 12, y: 68 },
+        { role: "DEF", title: "ZAE", x: 30, y: 72 },
+        { role: "DEF", title: "ZAG", x: 50, y: 74 },
+        { role: "DEF", title: "ZAD", x: 70, y: 72 },
+        { role: "DEF", title: "LWD", x: 88, y: 68 },
+        { role: "MID", title: "MC", x: 28, y: 46 },
+        { role: "MID", title: "MC", x: 50, y: 48 },
+        { role: "MID", title: "MC", x: 72, y: 46 },
+        { role: "ATT", title: "ATA", x: 35, y: 15 },
+        { role: "ATT", title: "ATA", x: 65, y: 15 },
+      ];
+    } else {
+      // 4-3-3 (Padrão)
+      slots = [
+        { role: "GK", title: "GK", x: 50, y: 88 },
+        { role: "DEF", title: "LE", x: 15, y: 70 },
+        { role: "DEF", title: "ZAG", x: 38, y: 72 },
+        { role: "DEF", title: "ZAG", x: 62, y: 72 },
+        { role: "DEF", title: "LD", x: 85, y: 70 },
+        { role: "MID", title: "MC", x: 25, y: 46 },
+        { role: "MID", title: "MC", x: 50, y: 50 },
+        { role: "MID", title: "MC", x: 75, y: 46 },
+        { role: "ATT", title: "PE", x: 20, y: 18 },
+        { role: "ATT", title: "ATA", x: 50, y: 12 },
+        { role: "ATT", title: "PD", x: 80, y: 18 },
+      ];
+    }
+
+    const gkCount = slots.filter((s) => s.role === "GK").length;
+    const defCount = slots.filter((s) => s.role === "DEF").length;
+    const midCount = slots.filter((s) => s.role === "MID").length;
+    const attCount = slots.filter((s) => s.role === "ATT").length;
+
+    const selectedGks = assignFromPool(gksPool, gkCount);
+    const selectedDefs = assignFromPool(defsPool, defCount);
+    const selectedMids = assignFromPool(midsPool, midCount);
+    const selectedAtts = assignFromPool(attsPool, attCount);
+
+    const fillRemaining = (assignedList, count) => {
+      let list = [...assignedList];
+      if (list.length < count) {
+        const remainingNeeded = count - list.length;
+        const unassigned = sortedPlayers.filter((p) => !assignedIds.has(p.id));
+        const extra = assignFromPool(unassigned, remainingNeeded);
+        list = [...list, ...extra];
+      }
+      return list;
+    };
+
+    const finalGks = fillRemaining(selectedGks, gkCount);
+    const finalDefs = fillRemaining(selectedDefs, defCount);
+    const finalMids = fillRemaining(selectedMids, midCount);
+    const finalAtts = fillRemaining(selectedAtts, attCount);
+
+    let gkIdx = 0;
+    let defIdx = 0;
+    let midIdx = 0;
+    let attIdx = 0;
+
+    const autoSlots = slots.map((slot) => {
+      let p = null;
+      if (slot.role === "GK" && gkIdx < finalGks.length) p = finalGks[gkIdx++];
+      else if (slot.role === "DEF" && defIdx < finalDefs.length) p = finalDefs[defIdx++];
+      else if (slot.role === "MID" && midIdx < finalMids.length) p = finalMids[midIdx++];
+      else if (slot.role === "ATT" && attIdx < finalAtts.length) p = finalAtts[attIdx++];
+      return { ...slot, player: p };
+    });
+
+    const savedLineup = Array.isArray(team.lineup) ? team.lineup : [];
+    const hasAnyStarters = savedLineup.some((id) => id !== null && id !== undefined);
+
+    if (!hasAnyStarters) {
+      return autoSlots;
+    }
+
+    return slots.map((slot, index) => {
+      const playerId = savedLineup[index];
+      let p = null;
+      if (playerId) {
+        p = sortedPlayers.find((player) => player.id.toString() === playerId.toString());
+      }
+      return { ...slot, player: p };
+    });
+  };
+
   useEffect(() => {
     loadData();
   }, []);
@@ -77,6 +357,15 @@ export default function MatchesPage() {
           setMatches(matchesData);
         }
       }
+
+      // Carregar todos os times para retrospecto
+      const { data: allTeamsData } = await supabase
+        .from("teams")
+        .select("id, name, badge_url")
+        .order("name", { ascending: true });
+      if (allTeamsData) {
+        setAllTeams(allTeamsData);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -87,10 +376,9 @@ export default function MatchesPage() {
   // Carregar elencos ao abrir formulário de reporte
   const openReportForm = async (match) => {
     setReportingMatch(match);
-    setHomeScore("");
-    setAwayScore("");
-    setEvents([]);
-    setMotmPlayerId("");
+    setHomeScore(match.home_score !== null ? match.home_score.toString() : "");
+    setAwayScore(match.away_score !== null ? match.away_score.toString() : "");
+    setMotmPlayerId(match.motm_player_id !== null ? match.motm_player_id.toString() : "");
 
     // 1. Carregar jogadores do time de casa
     const { data: homePlayers } = await supabase
@@ -115,6 +403,28 @@ export default function MatchesPage() {
     setHomeSquad(homePlayers || []);
     setAwaySquad(awayPlayers || []);
     setMatchSuspensions(suspensions ? suspensions.map(s => s.player_id) : []);
+
+    // 4. Carregar eventos já reportados se for uma edição
+    if (match.reported_by) {
+      const { data: prevEvents } = await supabase
+        .from("match_events")
+        .select("*")
+        .eq("match_id", match.id);
+
+      if (prevEvents && prevEvents.length > 0) {
+        setEvents(prevEvents.map(ev => ({
+          id: ev.id.toString(),
+          player_id: ev.player_id.toString(),
+          team_id: ev.team_id,
+          event_type: ev.event_type,
+          minute: ev.minute !== null ? ev.minute.toString() : "",
+        })));
+      } else {
+        setEvents([]);
+      }
+    } else {
+      setEvents([]);
+    }
   };
 
   const addEvent = () => {
@@ -160,7 +470,7 @@ export default function MatchesPage() {
     }
 
     try {
-      // 1. Placar, reportado por e MOTM
+      // 1. Placar, reportado por, status e MOTM (reseta disputa se houver)
       const { error: matchError } = await supabase
         .from("matches")
         .update({
@@ -168,12 +478,24 @@ export default function MatchesPage() {
           away_score: parseInt(awayScore),
           reported_by: userProfile.id,
           motm_player_id: motmPlayerId ? parseInt(motmPlayerId) : null,
+          status: "pending",
+          disputed_by: null,
+          dispute_reason: null,
+          dispute_proof_url: null,
         })
         .eq("id", reportingMatch.id);
 
       if (matchError) throw matchError;
 
-      // 2. Inserir Eventos da Partida
+      // 2. Deletar eventos anteriores para esta partida se já foi reportada (para evitar duplicados no re-reporte)
+      const { error: deleteError } = await supabase
+        .from("match_events")
+        .delete()
+        .eq("match_id", reportingMatch.id);
+
+      if (deleteError) throw deleteError;
+
+      // 3. Inserir Eventos da Partida
       // Filtrar eventos válidos (que possuem jogador selecionado)
       const validEvents = events
         .filter(ev => ev.player_id !== "")
@@ -346,11 +668,155 @@ export default function MatchesPage() {
         >
           📜 Histórico
         </button>
+        <button
+          onClick={() => {
+            setActiveTab("classicos");
+            setSelectedOpponentId("");
+            setH2hMatches([]);
+          }}
+          className={`px-4 py-3 text-xs uppercase font-bold tracking-wider border-b-2 transition-all ${
+            activeTab === "classicos"
+              ? "border-[#10b981] text-[#10b981]"
+              : "border-transparent text-gray-400 hover:text-white"
+          }`}
+        >
+          ⚔️ Retrospecto
+        </button>
       </div>
 
       {loading ? (
         <div className="flex h-48 items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#10b981] border-t-transparent"></div>
+        </div>
+      ) : activeTab === "classicos" ? (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Seletor de adversário */}
+          <div className="p-6 rounded-2xl bg-[#090d16]/40 border border-white/5 backdrop-blur-md space-y-4">
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Selecionar Adversário</h3>
+            <select
+              value={selectedOpponentId}
+              onChange={(e) => {
+                const oppId = e.target.value;
+                setSelectedOpponentId(oppId);
+                loadH2hMatches(oppId);
+              }}
+              className="w-full md:w-72 bg-[#060913] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#10b981]"
+            >
+              <option value="">Selecione um clube...</option>
+              {allTeams
+                .filter((t) => t.id !== myTeam?.id)
+                .map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {h2hLoading ? (
+            <div className="flex h-32 items-center justify-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#10b981] border-t-transparent"></div>
+            </div>
+          ) : selectedOpponentId ? (
+            h2hMatches.length > 0 ? (
+              <div className="space-y-6">
+                {/* Painel de Estatísticas KPIs */}
+                {(() => {
+                  const stats = calculateH2hStats();
+                  const opponentName = allTeams.find(t => t.id === selectedOpponentId)?.name || "Adversário";
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+                      <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10 text-center">
+                        <div className="text-2xl font-bold text-emerald-400">{stats.myWins}</div>
+                        <div className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mt-1">Minhas Vitórias</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-white/5 border border-white/5 text-center">
+                        <div className="text-2xl font-bold text-gray-300">{stats.draws}</div>
+                        <div className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mt-1">Empates</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-red-500/5 border border-red-500/10 text-center">
+                        <div className="text-2xl font-bold text-red-400">{stats.oppWins}</div>
+                        <div className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mt-1">Vitórias do {opponentName}</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-white/5 border border-white/5 text-center">
+                        <div className="text-2xl font-bold text-blue-400">{stats.myGols}</div>
+                        <div className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mt-1">Meus Gols</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-white/5 border border-white/5 text-center">
+                        <div className="text-2xl font-bold text-amber-400">{stats.oppGols}</div>
+                        <div className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mt-1">Gols do {opponentName}</div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Lista de Partidas H2H */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-bold text-white uppercase tracking-wider">Histórico de Jogos</h4>
+                  <div className="space-y-3">
+                    {h2hMatches.map((match) => {
+                      const isHome = match.home_team_id === myTeam?.id;
+                      return (
+                        <div
+                          key={match.id}
+                          className="p-5 rounded-2xl bg-[#090d16]/40 border border-white/5 backdrop-blur-md flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[9px] font-bold text-gray-400 bg-white/5 px-2.5 py-0.5 rounded">
+                                Rodada {match.round_number}
+                              </span>
+                              <span className="text-[9px] font-bold text-[#10b981] bg-[#10b981]/15 px-2.5 py-0.5 rounded">
+                                {match.seasons?.name} - {match.cup_name || "Liga"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 text-sm font-semibold text-white mt-1">
+                              <button
+                                onClick={() => handleViewTeamRoster(match.home_team)}
+                                className={`hover:text-[#10b981] transition-all text-left flex items-center gap-1.5 focus:outline-none ${match.home_team_id === myTeam?.id ? "text-[#10b981]" : ""}`}
+                                title="Ver elenco e tática"
+                              >
+                                {match.home_team?.badge_url && (
+                                  <img src={match.home_team.badge_url} alt="" className="w-4 h-4 object-contain inline-block" />
+                                )}
+                                <span>{match.home_team?.name}</span>
+                              </button>
+                              <span className="bg-white/5 px-2 py-0.5 rounded text-xs font-bold">
+                                {match.home_score} - {match.away_score}
+                              </span>
+                              <button
+                                onClick={() => handleViewTeamRoster(match.away_team)}
+                                className={`hover:text-[#10b981] transition-all text-left flex items-center gap-1.5 focus:outline-none ${match.away_team_id === myTeam?.id ? "text-[#10b981]" : ""}`}
+                                title="Ver elenco e tática"
+                              >
+                                {match.away_team?.badge_url && (
+                                  <img src={match.away_team.badge_url} alt="" className="w-4 h-4 object-contain inline-block" />
+                                )}
+                                <span>{match.away_team?.name}</span>
+                              </button>
+                            </div>
+                          </div>
+                          {match.motm_player_id && (
+                            <div className="text-[10px] text-gray-400">
+                              ⭐ MOTM: {match.motm_player_id === match.home_team?.motm_player_id ? match.home_team?.name : match.away_team?.name}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-16 text-gray-500 text-sm border border-dashed border-white/5 rounded-2xl">
+                Nenhum confronto direto registrado e confirmado entre vocês ainda.
+              </div>
+            )
+          ) : (
+            <div className="text-center py-16 text-gray-500 text-sm border border-dashed border-white/5 rounded-2xl">
+              Selecione um adversário para ver o retrospecto.
+            </div>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
@@ -384,11 +850,29 @@ export default function MatchesPage() {
                   </div>
 
                   <div className="flex items-center gap-4 text-white font-semibold">
-                    <span className={isHome ? "text-[#10b981]" : ""}>{match.home_team?.name}</span>
+                    <button
+                      onClick={() => handleViewTeamRoster(match.home_team)}
+                      className={`hover:text-[#10b981] transition-all text-left flex items-center gap-1.5 focus:outline-none ${isHome ? "text-[#10b981]" : ""}`}
+                      title="Ver elenco e tática"
+                    >
+                      {match.home_team?.badge_url && (
+                        <img src={match.home_team.badge_url} alt="" className="w-4 h-4 object-contain inline-block" />
+                      )}
+                      <span>{match.home_team?.name}</span>
+                    </button>
                     <span className="text-gray-400 bg-white/5 px-3 py-1 rounded-lg text-sm font-bold min-w-[50px] text-center">
                       {match.home_score !== null ? `${match.home_score} - ${match.away_score}` : "vs"}
                     </span>
-                    <span className={!isHome ? "text-[#10b981]" : ""}>{match.away_team?.name}</span>
+                    <button
+                      onClick={() => handleViewTeamRoster(match.away_team)}
+                      className={`hover:text-[#10b981] transition-all text-left flex items-center gap-1.5 focus:outline-none ${!isHome ? "text-[#10b981]" : ""}`}
+                      title="Ver elenco e tática"
+                    >
+                      {match.away_team?.badge_url && (
+                        <img src={match.away_team.badge_url} alt="" className="w-4 h-4 object-contain inline-block" />
+                      )}
+                      <span>{match.away_team?.name}</span>
+                    </button>
                   </div>
 
                   {match.motm_player && (
@@ -429,9 +913,17 @@ export default function MatchesPage() {
                   )}
 
                   {activeTab === "handshake" && waitingOppHandshake && (
-                    <span className="text-xs font-medium text-amber-400 bg-amber-400/10 border border-amber-400/20 px-4 py-2.5 rounded-xl">
-                      🕒 Aguardando validação do adversário
-                    </span>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="text-xs font-medium text-amber-400 bg-amber-400/10 border border-amber-400/20 px-4 py-2.5 rounded-xl">
+                        🕒 Aguardando validação do adversário
+                      </span>
+                      <button
+                        onClick={() => openReportForm(match)}
+                        className="px-4 py-2 rounded-xl text-xs font-bold bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20 hover:bg-[#3b82f6]/20 transition-all active:scale-[0.98] flex items-center gap-1.5"
+                      >
+                        📝 Editar Reporte
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -681,6 +1173,183 @@ export default function MatchesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Modal de Visualização de Elenco e Formação Tática */}
+      {viewingTeam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="glass-panel w-full max-w-5xl p-6 sm:p-8 rounded-2xl border border-white/10 bg-[#090d16]/95 shadow-2xl my-8 flex flex-col gap-6 animate-fadeIn">
+            {/* Header */}
+            <div className="flex justify-between items-center border-b border-white/5 pb-4">
+              <div>
+                <h2 className="text-xl font-black text-white flex items-center gap-2">
+                  🛡️ {viewingTeam.name}
+                </h2>
+                <p className="text-xs text-gray-400 mt-1">
+                  {viewingTeam.real_club_name ? `${viewingTeam.real_club_name} • ` : ""}
+                  Técnico: <span className="text-emerald-400 font-bold">{viewingCoach ? viewingCoach.display_name : "Sem técnico"}</span>
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setViewingTeam(null);
+                  setViewingPlayers([]);
+                  setViewingCoach(null);
+                }}
+                className="text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg text-xs transition-colors"
+              >
+                ✕ Fechar
+              </button>
+            </div>
+
+            {viewingLoading ? (
+              <div className="flex h-64 items-center justify-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#10b981] border-t-transparent"></div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                {/* Coluna 1: Campo Tático (6 cols) */}
+                <div className="lg:col-span-6 space-y-4">
+                   <div className="flex justify-between items-center">
+                     <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">Esquema Tático ({viewingTeam.formation || "4-3-3"})</h3>
+                     <span className="text-[10px] text-gray-500 bg-white/5 px-2 py-0.5 rounded font-semibold">Titulares</span>
+                   </div>
+                   
+                   <div className="relative aspect-[4/3] w-full rounded-2xl bg-gradient-to-b from-emerald-800/90 to-emerald-950/95 border border-emerald-500/20 overflow-hidden shadow-2xl">
+                     {/* Linhas do Campo */}
+                     <div className="absolute inset-0 pointer-events-none">
+                       {/* Bordas */}
+                       <div className="absolute top-[5%] bottom-[5%] left-[5%] right-[5%] border border-white/10" />
+                       {/* Linha do Meio de Campo */}
+                       <div className="absolute top-1/2 left-[5%] right-[5%] h-px bg-white/15" />
+                       {/* Círculo Central */}
+                       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 border border-white/15 rounded-full" />
+                       {/* Ponto Central */}
+                       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white/30 rounded-full" />
+                       {/* Grande Área Superior (Ataque) */}
+                       <div className="absolute top-[5%] left-1/2 -translate-x-1/2 w-[48%] h-[16%] border-b border-x border-white/10" />
+                       {/* Grande Área Inferior (Goleiro) */}
+                       <div className="absolute bottom-[5%] left-1/2 -translate-x-1/2 w-[48%] h-[16%] border-t border-x border-white/10" />
+                     </div>
+
+                     {/* Mapeamento de Jogadores no Campo */}
+                     {getViewingFormationSlots(viewingTeam, viewingPlayers).map((slot, index) => (
+                       <div
+                         key={index}
+                         className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center select-none"
+                         style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
+                       >
+                         {slot.player ? (
+                           <div className="flex flex-col items-center animate-fadeIn">
+                             <div className="relative h-11 w-11 sm:h-12 sm:w-12 rounded-lg bg-[#090d16]/95 border border-white/15 flex items-center justify-center overflow-hidden shadow-lg">
+                               {/* Rating Badge */}
+                               <span className="absolute top-0.5 left-1 text-[8px] font-black bg-[#060913]/90 rounded px-0.5 leading-none text-[#10b981]">
+                                 {slot.player.rating}
+                               </span>
+                               {/* Position Badge */}
+                               <span className="absolute bottom-0.5 right-1 text-[7px] font-bold text-gray-300 bg-[#060913]/90 rounded px-0.5 leading-none uppercase">
+                                 {slot.title}
+                               </span>
+                               {slot.player.face_url ? (
+                                 <img src={slot.player.face_url} alt="" className="h-full w-full object-cover scale-110" />
+                               ) : (
+                                 <span className="text-sm">👤</span>
+                               )}
+                             </div>
+                             <span className="text-[9px] font-bold text-white bg-[#090d16]/80 rounded px-1 mt-1 truncate max-w-[65px] text-center">
+                               {slot.player.common_name || slot.player.name.split(' ').pop()}
+                             </span>
+                           </div>
+                         ) : (
+                           /* Slot Vazio */
+                           <div className="flex flex-col items-center">
+                             <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full border border-dashed border-white/20 bg-black/30 flex items-center justify-center text-[8px] text-gray-400 font-bold uppercase">
+                               {slot.title}
+                             </div>
+                           </div>
+                         )}
+                       </div>
+                     ))}
+                   </div>
+                   
+                   {/* Banco de Reservas */}
+                   <div className="space-y-2">
+                     <div className="flex justify-between items-center">
+                       <h4 className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Banco de Reservas</h4>
+                       <span className="text-[9px] text-gray-500 font-semibold">Suplentes</span>
+                     </div>
+                     <div className="flex flex-wrap gap-2 p-3 rounded-xl bg-white/5 border border-white/5 max-h-[140px] overflow-y-auto">
+                       {(() => {
+                         const slots = getViewingFormationSlots(viewingTeam, viewingPlayers);
+                         const startIds = new Set(slots.map(s => s.player?.id).filter(Boolean));
+                         const bench = viewingPlayers.filter(p => !startIds.has(p.id));
+                         
+                         return bench.map(p => (
+                           <div key={p.id} className="flex items-center gap-1.5 bg-[#090d16]/60 border border-white/5 rounded-lg p-1 px-2.5 max-w-[140px] truncate" title={`${p.name} (${p.position})`}>
+                             <span className="text-[9px] font-bold text-[#10b981] bg-[#10b981]/10 px-1 rounded">{p.rating}</span>
+                             <span className="text-[9px] font-semibold text-gray-400 uppercase">{p.position}</span>
+                             <span className="text-[10px] font-medium text-white truncate flex-1">{p.common_name || p.name.split(' ').pop()}</span>
+                           </div>
+                         ));
+                       })()}
+                       {viewingPlayers.length === 0 && <span className="text-[10px] text-gray-500 italic">Nenhum jogador no elenco</span>}
+                     </div>
+                   </div>
+                 </div>
+
+                {/* Coluna 2: Tabela de Detalhes dos Jogadores (6 cols) */}
+                <div className="lg:col-span-6 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">Elenco Completo ({viewingPlayers.length} jogadores)</h3>
+                    <div className="text-[10px] text-gray-400">
+                      Média de Over: <span className="text-emerald-400 font-bold">{viewingPlayers.length > 0 ? Math.round(viewingPlayers.reduce((sum, p) => sum + p.rating, 0) / viewingPlayers.length) : 0}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="overflow-x-auto rounded-xl border border-white/5 bg-[#090d16]/20 max-h-[510px] overflow-y-auto">
+                    <table className="w-full text-left text-sm text-gray-300 border-collapse">
+                      <thead>
+                        <tr className="text-[9px] font-bold uppercase text-gray-500 border-b border-white/5 bg-white/[0.01]">
+                          <th className="py-2.5 px-3">Jogador</th>
+                          <th className="py-2.5 px-3 text-center w-16">Posição</th>
+                          <th className="py-2.5 px-3 text-center w-16">Rating</th>
+                          <th className="py-2.5 px-3 text-right w-24">Valor</th>
+                          <th className="py-2.5 px-3 text-right w-24">Salário</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5 text-xs">
+                        {viewingPlayers.map(p => (
+                          <tr key={p.id} className="hover:bg-white/[0.02] transition-colors">
+                            <td className="py-2 px-3 font-semibold text-white">
+                              <div className="flex items-center gap-2">
+                                <div className="h-6 w-6 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                  {p.face_url ? (
+                                    <img src={p.face_url} alt="" className="h-full w-full object-cover scale-110" />
+                                  ) : (
+                                    <span>👤</span>
+                                  )}
+                                </div>
+                                <span className="truncate" title={p.name}>{p.name}</span>
+                              </div>
+                            </td>
+                            <td className="py-2 px-3 text-center text-gray-400 font-bold uppercase">{p.position}</td>
+                            <td className="py-2 px-3 text-center font-bold text-[#10b981]">{p.rating}</td>
+                            <td className="py-2 px-3 text-right font-medium text-blue-400">R$ {parseFloat(p.value).toLocaleString("pt-BR")}</td>
+                            <td className="py-2 px-3 text-right text-emerald-400">R$ {p.wage.toLocaleString("pt-BR")}</td>
+                          </tr>
+                        ))}
+                        {viewingPlayers.length === 0 && (
+                          <tr>
+                            <td colSpan="5" className="py-8 text-center text-gray-500 italic">Nenhum jogador no time</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

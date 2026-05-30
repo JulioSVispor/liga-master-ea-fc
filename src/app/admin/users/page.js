@@ -25,6 +25,78 @@ export default function AdminUsersPage() {
   const [editPlayerWage, setEditPlayerWage] = useState("");
   const [editPlayerValue, setEditPlayerValue] = useState("");
 
+  // Novos estados para aba de atribuição de agentes livres
+  const [activeSquadTab, setActiveSquadTab] = useState("current"); // "current" | "free_agents"
+  const [freeAgents, setFreeAgents] = useState([]);
+  const [freeAgentsLoading, setFreeAgentsLoading] = useState(false);
+  const [freeAgentsFilter, setFreeAgentsFilter] = useState("");
+
+  // Carregar Agentes Livres (Sem Time)
+  const loadFreeAgents = async () => {
+    setFreeAgentsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("players")
+        .select("*")
+        .is("team_id", null)
+        .order("rating", { ascending: false });
+
+      if (error) throw error;
+      setFreeAgents(data || []);
+    } catch (err) {
+      console.error("Erro ao carregar agentes livres:", err);
+    } finally {
+      setFreeAgentsLoading(false);
+    }
+  };
+
+  // Adicionar Agente Livre ao Time
+  const handleAddFreeAgentToTeam = async (player) => {
+    if (!selectedTeamForSquad) return;
+    try {
+      const { error } = await supabase
+        .from("players")
+        .update({ team_id: selectedTeamForSquad.id })
+        .eq("id", player.id);
+
+      if (error) throw error;
+
+      // Registrar no histórico de transferências
+      await supabase
+        .from("transfer_history")
+        .insert({
+          player_id: player.id,
+          player_name: player.name,
+          player_position: player.position,
+          player_rating: player.rating,
+          player_face_url: player.face_url,
+          from_team_id: null,
+          from_team_name: "Agente Livre",
+          to_team_id: selectedTeamForSquad.id,
+          to_team_name: selectedTeamForSquad.name,
+          amount: player.value,
+          transfer_type: "trade"
+        });
+
+      // Notificar treinador
+      if (selectedTeamForSquad.user_id) {
+        await supabase.from("notifications").insert({
+          user_id: selectedTeamForSquad.user_id,
+          title: "Jogador Adicionado pelo Admin 🏃‍♂️",
+          content: `O administrador adicionou o jogador ${player.name} (${player.position}, Over ${player.rating}) ao elenco do seu time.`
+        });
+      }
+
+      alert(`Jogador ${player.name} adicionado com sucesso ao ${selectedTeamForSquad.name}!`);
+      
+      // Atualizar estados locais
+      setFreeAgents((prev) => prev.filter((p) => p.id !== player.id));
+      refreshSquad(selectedTeamForSquad.id);
+    } catch (err) {
+      alert("Erro ao adicionar jogador ao time: " + err.message);
+    }
+  };
+
   // Carrega todos os usuários e seus times
   const loadUsers = async () => {
     setLoading(true);
@@ -171,6 +243,8 @@ export default function AdminUsersPage() {
     setSquadModalOpen(true);
     setSquadLoading(true);
     setSquadFilter("");
+    setFreeAgentsFilter("");
+    setActiveSquadTab("current");
     setEditingPlayerId(null);
     try {
       const { data, error } = await supabase
@@ -181,6 +255,9 @@ export default function AdminUsersPage() {
 
       if (error) throw error;
       setSquadPlayers(data || []);
+      
+      // Carregar agentes livres preventivamente
+      await loadFreeAgents();
     } catch (err) {
       console.error("Erro ao carregar elenco:", err);
       alert("Erro ao carregar elenco: " + err.message);
@@ -539,7 +616,7 @@ export default function AdminUsersPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs text-gray-300 font-semibold">Teto Salarial Semanal</label>
+                <label className="text-xs text-gray-300 font-semibold">Teto Salarial</label>
                 <input
                   type="number"
                   step="0.01"
@@ -596,158 +673,278 @@ export default function AdminUsersPage() {
               </button>
             </div>
 
-            {/* Barra de Filtro */}
-            <div className="flex items-center gap-3">
-              <input
-                type="text"
-                placeholder="Filtrar jogadores por nome ou posição..."
-                value={squadFilter}
-                onChange={(e) => setSquadFilter(e.target.value)}
-                className="w-full max-w-md bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs text-white outline-none focus:border-[#10b981]"
-              />
+            {/* Tabs de Elenco */}
+            <div className="flex border-b border-white/5 gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveSquadTab("current")}
+                className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 ${
+                  activeSquadTab === "current"
+                    ? "border-[#10b981] text-[#10b981]"
+                    : "border-transparent text-gray-400 hover:text-white"
+                }`}
+              >
+                📋 Elenco Atual ({squadPlayers.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveSquadTab("free_agents");
+                  loadFreeAgents();
+                }}
+                className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 ${
+                  activeSquadTab === "free_agents"
+                    ? "border-[#10b981] text-[#10b981]"
+                    : "border-transparent text-gray-400 hover:text-white"
+                }`}
+              >
+                ➕ Contratar Agentes Livres ({freeAgents.length})
+              </button>
             </div>
 
-            {/* Lista de Jogadores */}
-            {squadLoading ? (
-              <div className="flex h-32 items-center justify-center">
-                <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#10b981] border-t-transparent"></div>
-              </div>
-            ) : (
-              <div className="overflow-x-auto border border-white/5 rounded-xl max-h-96 overflow-y-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-white/5 bg-white/[0.02] font-bold text-gray-400 uppercase tracking-wider">
-                      <th className="px-4 py-3">Jogador</th>
-                      <th className="px-4 py-3">Classificação</th>
-                      <th className="px-4 py-3">Posição</th>
-                      <th className="px-4 py-3">Salário Semanal</th>
-                      <th className="px-4 py-3">Valor Passe</th>
-                      <th className="px-4 py-3 text-center">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5 text-gray-200">
-                    {squadPlayers
-                      .filter(p => {
-                        const q = squadFilter.toLowerCase();
-                        return (p.name || "").toLowerCase().includes(q) || (p.position || "").toLowerCase().includes(q);
-                      })
-                      .map(player => {
-                        const isEditing = editingPlayerId === player.id;
-                        return (
-                          <tr key={player.id} className="hover:bg-white/[0.01]">
-                            {/* Nome e Foto */}
-                            <td className="px-4 py-3 flex items-center gap-2">
-                              {player.face_url ? (
-                                <img src={player.face_url} alt="" className="h-7 w-7 rounded-full object-cover" />
-                              ) : (
-                                <span className="text-sm">👤</span>
-                              )}
-                              <span className="font-semibold text-white">{player.name}</span>
-                            </td>
+            {activeSquadTab === "current" ? (
+              <>
+                {/* Barra de Filtro */}
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    placeholder="Filtrar jogadores do elenco por nome ou posição..."
+                    value={squadFilter}
+                    onChange={(e) => setSquadFilter(e.target.value)}
+                    className="w-full max-w-md bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs text-white outline-none focus:border-[#10b981]"
+                  />
+                </div>
 
-                            {/* Overall */}
-                            <td className="px-4 py-3">
-                              <span className="px-2 py-0.5 rounded bg-white/5 text-white font-bold">
-                                {player.rating}
-                              </span>
-                            </td>
+                {/* Lista de Jogadores do Elenco */}
+                {squadLoading ? (
+                  <div className="flex h-32 items-center justify-center">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#10b981] border-t-transparent"></div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto border border-white/5 rounded-xl max-h-96 overflow-y-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-white/5 bg-white/[0.02] font-bold text-gray-400 uppercase tracking-wider">
+                          <th className="px-4 py-3">Jogador</th>
+                          <th className="px-4 py-3">Classificação</th>
+                          <th className="px-4 py-3">Posição</th>
+                          <th className="px-4 py-3">Salário</th>
+                          <th className="px-4 py-3">Valor Passe</th>
+                          <th className="px-4 py-3 text-center">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5 text-gray-200">
+                        {squadPlayers
+                          .filter(p => {
+                            const q = squadFilter.toLowerCase();
+                            return (p.name || "").toLowerCase().includes(q) || (p.position || "").toLowerCase().includes(q);
+                          })
+                          .map(player => {
+                            const isEditing = editingPlayerId === player.id;
+                            return (
+                              <tr key={player.id} className="hover:bg-white/[0.01]">
+                                <td className="px-4 py-3 flex items-center gap-2">
+                                  {player.face_url ? (
+                                    <img src={player.face_url} alt="" className="h-7 w-7 rounded-full object-cover" />
+                                  ) : (
+                                    <span className="text-sm">👤</span>
+                                  )}
+                                  <span className="font-semibold text-white">{player.name}</span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="px-2 py-0.5 rounded bg-white/5 text-white font-bold">
+                                    {player.rating}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="text-gray-400">{player.position}</span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  {isEditing ? (
+                                    <input
+                                      type="number"
+                                      value={editPlayerWage}
+                                      onChange={(e) => setEditPlayerWage(e.target.value)}
+                                      className="w-20 bg-[#060913] border border-white/10 rounded px-1.5 py-1 text-white text-xs"
+                                    />
+                                  ) : (
+                                    `R$ ${parseFloat(player.wage).toLocaleString("pt-BR")}`
+                                  )}
+                                </td>
+                                <td className="px-4 py-3">
+                                  {isEditing ? (
+                                    <input
+                                      type="number"
+                                      value={editPlayerValue}
+                                      onChange={(e) => setEditPlayerValue(e.target.value)}
+                                      className="w-24 bg-[#060913] border border-white/10 rounded px-1.5 py-1 text-white text-xs"
+                                    />
+                                  ) : (
+                                    `R$ ${parseFloat(player.value).toLocaleString("pt-BR")}`
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="flex justify-center items-center gap-2">
+                                    {isEditing ? (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSavePlayerEdit(player)}
+                                          className="px-2 py-1 bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30 hover:bg-[#10b981] hover:text-white rounded"
+                                        >
+                                          ✓ Salvar
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditingPlayerId(null)}
+                                          className="px-2 py-1 bg-white/5 text-gray-300 border border-white/10 rounded"
+                                        >
+                                          Cancelar
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => startEditPlayer(player)}
+                                          className="px-2 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500 hover:text-white rounded"
+                                        >
+                                          ✏️ Editar
+                                        </button>
+                                        
+                                        <select
+                                          onChange={(e) => {
+                                            if (e.target.value !== "") {
+                                              handleTransferPlayer(player, e.target.value === "free" ? null : e.target.value);
+                                              e.target.value = "";
+                                            }
+                                          }}
+                                          defaultValue=""
+                                          className="bg-[#090d16] border border-white/10 rounded px-2 py-1 text-xs text-gray-300 outline-none"
+                                        >
+                                          <option value="" disabled>🔄 Mover...</option>
+                                          <option value="free">Agente Livre</option>
+                                          {allTeams
+                                            .filter(t => t.id !== selectedTeamForSquad.id)
+                                            .map(t => (
+                                              <option key={t.id} value={t.id}>{t.name}</option>
+                                            ))}
+                                        </select>
 
-                            {/* Posição */}
-                            <td className="px-4 py-3">
-                              <span className="text-gray-400">{player.position}</span>
-                            </td>
-
-                            {/* Salário */}
-                            <td className="px-4 py-3">
-                              {isEditing ? (
-                                <input
-                                  type="number"
-                                  value={editPlayerWage}
-                                  onChange={(e) => setEditPlayerWage(e.target.value)}
-                                  className="w-20 bg-[#060913] border border-white/10 rounded px-1.5 py-1 text-white text-xs"
-                                />
-                              ) : (
-                                `R$ ${parseFloat(player.wage).toLocaleString("pt-BR")}`
-                              )}
-                            </td>
-
-                            {/* Passe */}
-                            <td className="px-4 py-3">
-                              {isEditing ? (
-                                <input
-                                  type="number"
-                                  value={editPlayerValue}
-                                  onChange={(e) => setEditPlayerValue(e.target.value)}
-                                  className="w-24 bg-[#060913] border border-white/10 rounded px-1.5 py-1 text-white text-xs"
-                                />
-                              ) : (
-                                `R$ ${parseFloat(player.value).toLocaleString("pt-BR")}`
-                              )}
-                            </td>
-
-                            {/* Ações Rápidas */}
-                            <td className="px-4 py-3 whitespace-nowrap text-center">
-                              <div className="flex justify-center items-center gap-2">
-                                {isEditing ? (
-                                  <>
-                                    <button
-                                      onClick={() => handleSavePlayerEdit(player)}
-                                      className="px-2 py-1 bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30 hover:bg-[#10b981] hover:text-white rounded"
-                                    >
-                                      ✓ Salvar
-                                    </button>
-                                    <button
-                                      onClick={() => setEditingPlayerId(null)}
-                                      className="px-2 py-1 bg-white/5 text-gray-300 border border-white/10 rounded"
-                                    >
-                                      Cancelar
-                                    </button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <button
-                                      onClick={() => startEditPlayer(player)}
-                                      className="px-2 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500 hover:text-white rounded"
-                                    >
-                                      ✏️ Editar
-                                    </button>
-                                    
-                                    {/* Transferir Dropdown Select */}
-                                    <select
-                                      onChange={(e) => {
-                                        if (e.target.value !== "") {
-                                          handleTransferPlayer(player, e.target.value === "free" ? null : e.target.value);
-                                          e.target.value = ""; // Reset dropdown
-                                        }
-                                      }}
-                                      defaultValue=""
-                                      className="bg-[#090d16] border border-white/10 rounded px-2 py-1 text-xs text-gray-300 outline-none"
-                                    >
-                                      <option value="" disabled>🔄 Mover...</option>
-                                      <option value="free">Agente Livre</option>
-                                      {allTeams
-                                        .filter(t => t.id !== selectedTeamForSquad.id)
-                                        .map(t => (
-                                          <option key={t.id} value={t.id}>{t.name}</option>
-                                        ))}
-                                    </select>
-
-                                    <button
-                                      onClick={() => handleReleasePlayerDirect(player)}
-                                      className="px-2 py-1 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white rounded"
-                                    >
-                                      🗑️ Liberar
-                                    </button>
-                                  </>
-                                )}
-                              </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleReleasePlayerDirect(player)}
+                                          className="px-2 py-1 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white rounded"
+                                        >
+                                          🗑️ Liberar
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        {squadPlayers.length === 0 && (
+                          <tr>
+                            <td colSpan="6" className="px-4 py-8 text-center text-gray-500">
+                              Este elenco está vazio no momento.
                             </td>
                           </tr>
-                        );
-                      })}
-                  </tbody>
-                </table>
-              </div>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Barra de Filtro de Agentes Livres */}
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    placeholder="Buscar agentes livres por nome ou posição..."
+                    value={freeAgentsFilter}
+                    onChange={(e) => setFreeAgentsFilter(e.target.value)}
+                    className="w-full max-w-md bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs text-white outline-none focus:border-[#10b981]"
+                  />
+                </div>
+
+                {/* Lista de Agentes Livres */}
+                {freeAgentsLoading ? (
+                  <div className="flex h-32 items-center justify-center">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#10b981] border-t-transparent"></div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto border border-white/5 rounded-xl max-h-96 overflow-y-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-white/5 bg-white/[0.02] font-bold text-gray-400 uppercase tracking-wider">
+                          <th className="px-4 py-3">Jogador</th>
+                          <th className="px-4 py-3">Classificação</th>
+                          <th className="px-4 py-3">Posição</th>
+                          <th className="px-4 py-3">Salário</th>
+                          <th className="px-4 py-3">Valor Passe</th>
+                          <th className="px-4 py-3 text-center">Ação</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5 text-gray-200">
+                        {freeAgents
+                          .filter(p => {
+                            const q = freeAgentsFilter.toLowerCase();
+                            return (p.name || "").toLowerCase().includes(q) || (p.position || "").toLowerCase().includes(q);
+                          })
+                          .slice(0, 100) // Renderizar os top 100 para evitar lag de DOM
+                          .map(player => (
+                            <tr key={player.id} className="hover:bg-white/[0.01]">
+                              <td className="px-4 py-3 flex items-center gap-2">
+                                {player.face_url ? (
+                                  <img src={player.face_url} alt="" className="h-7 w-7 rounded-full object-cover" />
+                                ) : (
+                                  <span className="text-sm">👤</span>
+                                )}
+                                <span className="font-semibold text-white">{player.name}</span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className="px-2 py-0.5 rounded bg-white/5 text-white font-bold">
+                                  {player.rating}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className="text-gray-400">{player.position}</span>
+                              </td>
+                              <td className="px-4 py-3">
+                                R$ {parseFloat(player.wage).toLocaleString("pt-BR")}
+                              </td>
+                              <td className="px-4 py-3">
+                                R$ {parseFloat(player.value).toLocaleString("pt-BR")}
+                              </td>
+                              <td className="px-4 py-3 text-center whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddFreeAgentToTeam(player)}
+                                  className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded font-bold transition-all text-[10px]"
+                                >
+                                  ➕ Adicionar ao Time
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        {freeAgents.filter(p => {
+                          const q = freeAgentsFilter.toLowerCase();
+                          return (p.name || "").toLowerCase().includes(q) || (p.position || "").toLowerCase().includes(q);
+                        }).length === 0 && (
+                          <tr>
+                            <td colSpan="6" className="px-4 py-8 text-center text-gray-500">
+                              Nenhum Agente Livre correspondente aos filtros.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
             )}
 
             <div className="flex justify-end pt-2">

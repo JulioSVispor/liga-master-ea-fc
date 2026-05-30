@@ -78,6 +78,7 @@ export default function AdminLayout({ children }) {
     { name: "Lista de Espera", path: "/admin/waitlist", icon: "📋" },
     { name: "Patrocínios", path: "/admin/sponsorships", icon: "💼" },
     { name: "Finalizar Temporada", path: "/admin/season", icon: "🏁" },
+    { name: "Mural de Notícias", path: "/admin/news", icon: "📰" },
     { name: "Configurações", path: "/admin/settings", icon: "⚙️" },
   ];
 

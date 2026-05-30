@@ -32,9 +32,6 @@ export default function AdminSeasonPage() {
   const [seasonStage, setSeasonStage] = useState("first_half");
   const [roundsPerHalf, setRoundsPerHalf] = useState(10);
   const [teamsList, setTeamsList] = useState([]);
-  const [roundsToCharge, setRoundsToCharge] = useState(20);
-  const [customDebits, setCustomDebits] = useState({});
-  const [processingWages, setProcessingWages] = useState(false);
 
   const showMsg = (text, type = "success") => {
     setMsg({ text, type });
@@ -72,13 +69,12 @@ export default function AdminSeasonPage() {
         
         const roundsVal = parseInt(map.season_rounds_per_half || "10");
         setRoundsPerHalf(roundsVal);
-        setRoundsToCharge(roundsVal * 2);
 
         if (seasonData) {
           // Artilheiros (top 5 por gols)
           const { data: scorersData } = await supabase
             .from("match_events")
-            .select("player_id, players(name, teams(name))")
+            .select("player_id, players(name, teams:teams!players_team_id_fkey(name))")
             .eq("event_type", "goal")
             .eq("season_id", seasonData.id);
 
@@ -106,7 +102,7 @@ export default function AdminSeasonPage() {
           // Assistências (top 5)
           const { data: assistsData } = await supabase
             .from("match_events")
-            .select("player_id, players(name, teams(name))")
+            .select("player_id, players(name, teams:teams!players_team_id_fkey(name))")
             .eq("event_type", "assist")
             .eq("season_id", seasonData.id);
 
@@ -134,7 +130,7 @@ export default function AdminSeasonPage() {
           // Melhor em Campo (MOTM) (top 5)
           const { data: motmData } = await supabase
             .from("matches")
-            .select("motm_player_id, players:players!motm_player_id(name, teams:teams!team_id(name))")
+            .select("motm_player_id, players:players!motm_player_id(name, teams:teams!players_team_id_fkey(name))")
             .eq("season_id", seasonData.id)
             .eq("status", "confirmed")
             .not("motm_player_id", "is", null);
@@ -178,17 +174,11 @@ export default function AdminSeasonPage() {
         if (stage === "season_end_wages") {
           const { data: teamsData, error: teamsError } = await supabase
             .from("teams")
-            .select("id, name, budget, players(wage)")
+            .select("id, name, budget, max_wage_cap, players:players!players_team_id_fkey(wage)")
             .order("name", { ascending: true });
 
           if (!teamsError && teamsData) {
             setTeamsList(teamsData);
-            const debits = {};
-            teamsData.forEach((team) => {
-              const weeklyWage = team.players ? team.players.reduce((sum, p) => sum + parseFloat(p.wage || 0), 0) : 0;
-              debits[team.id] = (weeklyWage * (roundsVal * 2)).toString();
-            });
-            setCustomDebits(debits);
           }
         }
 
@@ -201,22 +191,16 @@ export default function AdminSeasonPage() {
     loadData();
   }, []);
 
-  const loadTeamsAndWages = async (roundsVal) => {
+  const loadTeamsAndWages = async () => {
     try {
       const { data, error } = await supabase
         .from("teams")
-        .select("id, name, budget, players(wage)")
+        .select("id, name, budget, max_wage_cap, players:players!players_team_id_fkey(wage)")
         .order("name", { ascending: true });
 
       if (error) throw error;
       if (data) {
         setTeamsList(data);
-        const debits = {};
-        data.forEach((team) => {
-          const weeklyWage = team.players ? team.players.reduce((sum, p) => sum + parseFloat(p.wage || 0), 0) : 0;
-          debits[team.id] = (weeklyWage * roundsVal).toString();
-        });
-        setCustomDebits(debits);
       }
     } catch (err) {
       console.error("Erro ao carregar dados dos clubes:", err);
@@ -225,9 +209,32 @@ export default function AdminSeasonPage() {
 
   const handleAdvanceStage = async (newStage, additionalSettings = []) => {
     try {
+      let stageSettings = [];
+      if (additionalSettings.length > 0) {
+        stageSettings = additionalSettings;
+      } else {
+        if (newStage === "mid_season_market") {
+          stageSettings = [
+            { key: "negotiations_enabled", value: "true" },
+            { key: "salary_window_open", value: "true" },
+            { key: "trade_enabled", value: "true" },
+            { key: "loan_enabled", value: "true" },
+            { key: "buyout_enabled", value: "true" }
+          ];
+        } else {
+          stageSettings = [
+            { key: "negotiations_enabled", value: "false" },
+            { key: "salary_window_open", value: "false" },
+            { key: "trade_enabled", value: "false" },
+            { key: "loan_enabled", value: "false" },
+            { key: "buyout_enabled", value: "false" }
+          ];
+        }
+      }
+
       const settingsUpsert = [
         { key: "season_stage", value: newStage },
-        ...additionalSettings
+        ...stageSettings
       ];
 
       const { error } = await supabase
@@ -239,68 +246,12 @@ export default function AdminSeasonPage() {
       setSeasonStage(newStage);
 
       if (newStage === "season_end_wages") {
-        await loadTeamsAndWages(roundsToCharge);
+        await loadTeamsAndWages();
       }
 
       showMsg("Etapa do campeonato atualizada com sucesso!");
     } catch (err) {
       showMsg("Erro ao atualizar etapa: " + err.message, "error");
-    }
-  };
-
-  const handleRoundsToChargeChange = (value) => {
-    const rounds = parseInt(value) || 0;
-    setRoundsToCharge(rounds);
-    
-    setCustomDebits((prev) => {
-      const updated = { ...prev };
-      teamsList.forEach((team) => {
-        const weeklyWage = team.players ? team.players.reduce((sum, p) => sum + parseFloat(p.wage || 0), 0) : 0;
-        updated[team.id] = (weeklyWage * rounds).toString();
-      });
-      return updated;
-    });
-  };
-
-  const handleProcessWages = async () => {
-    setProcessingWages(true);
-    try {
-      const teamIds = [];
-      const amounts = [];
-
-      teamsList.forEach((team) => {
-        const val = parseFloat(customDebits[team.id]) || 0;
-        teamIds.push(team.id);
-        amounts.push(val);
-      });
-
-      const label = `${roundsToCharge} semanas cobradas`;
-
-      const { data, error } = await supabase.rpc("deduct_custom_salaries", {
-        p_team_ids: teamIds,
-        p_amounts: amounts,
-        p_rounds_label: label,
-      });
-
-      if (error) throw error;
-
-      if (data && data.success) {
-        showMsg(data.message || "Balanço concluído! Saldo de transferências dos times atualizados.");
-        
-        await supabase.from("settings").upsert([
-          { key: "season_stage", value: "first_half" }
-        ], { onConflict: "key" });
-        setSeasonStage("first_half");
-
-        // Abrir modal de confirmação final para encerrar a temporada
-        setShowModal(true);
-      } else {
-        showMsg(data?.message || "Erro ao processar balanço financeiro.", "error");
-      }
-    } catch (err) {
-      showMsg("Erro ao processar balanço financeiro: " + err.message, "error");
-    } finally {
-      setProcessingWages(false);
     }
   };
 
@@ -313,12 +264,19 @@ export default function AdminSeasonPage() {
 
     setFinishing(true);
     try {
+      // 1. Atualizar temporada
       const { error } = await supabase
         .from("seasons")
         .update({ status: "completed" })
         .eq("id", activeSeason.id);
 
       if (error) throw error;
+
+      // 2. Resetar etapa da temporada para 'first_half'
+      await supabase.from("settings").upsert([
+        { key: "season_stage", value: "first_half" }
+      ], { onConflict: "key" });
+      setSeasonStage("first_half");
 
       setActiveSeason((prev) => ({ ...prev, status: "completed" }));
       setShowModal(false);
@@ -518,24 +476,11 @@ export default function AdminSeasonPage() {
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-white/5 pb-4">
                 <div className="text-left">
                   <h3 className="text-base font-bold text-white flex items-center gap-2">
-                    💵 Folha Salarial & Ajustes do Elenco
+                    📋 Resumo dos Elencos & Folha Salarial
                   </h3>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    Defina o período a cobrar ou ajuste o débito de cada time manualmente antes de confirmar o pagamento.
+                    Verifique a conformidade de folha salarial, teto salarial e orçamento das equipes antes de finalizar a temporada.
                   </p>
-                </div>
-                
-                {/* Multiplicador Global */}
-                <div className="flex items-center gap-2 bg-[#090d16] border border-white/10 rounded-xl px-4 py-2">
-                  <span className="text-xs text-gray-400">Semanas a cobrar:</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max="50"
-                    value={roundsToCharge}
-                    onChange={(e) => handleRoundsToChargeChange(e.target.value)}
-                    className="w-12 bg-transparent text-white text-xs font-bold text-center focus:outline-none"
-                  />
                 </div>
               </div>
 
@@ -548,44 +493,45 @@ export default function AdminSeasonPage() {
                       <thead>
                         <tr className="text-[10px] font-bold uppercase text-gray-500 border-b border-white/5 bg-white/[0.01]">
                           <th className="py-3 px-4">Clube</th>
-                          <th className="py-3 px-4 text-right">Folha Semanal</th>
-                          <th className="py-3 px-4 text-right">Orçamento Atual</th>
-                          <th className="py-3 px-4 text-center w-48">Débito Customizado (R$)</th>
-                          <th className="py-3 px-4 text-right">Orçamento Estimado</th>
+                          <th className="py-3 px-4 text-center">Elenco</th>
+                          <th className="py-3 px-4 text-right">Folha Salarial</th>
+                          <th className="py-3 px-4 text-right">Teto Salarial</th>
+                          <th className="py-3 px-4 text-center">Status do Teto</th>
+                          <th className="py-3 px-4 text-right">Saldo em Caixa</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
                         {teamsList.map((team) => {
-                          const weeklyWage = team.players ? team.players.reduce((sum, p) => sum + parseFloat(p.wage || 0), 0) : 0;
-                          const customDebitVal = parseFloat(customDebits[team.id]) || 0;
-                          const estimatedBudget = team.budget - customDebitVal;
+                          const squadWage = team.players ? team.players.reduce((sum, p) => sum + parseFloat(p.wage || 0), 0) : 0;
+                          const maxWageCap = parseFloat(team.max_wage_cap || 0);
+                          const isOverCap = squadWage > maxWageCap;
+                          const squadSize = team.players ? team.players.length : 0;
 
                           return (
                             <tr key={team.id} className="hover:bg-white/[0.02] transition-colors">
                               <td className="py-2.5 px-4 font-bold text-white">{team.name}</td>
-                              <td className="py-2.5 px-4 text-right text-xs">
-                                R$ {weeklyWage.toLocaleString("pt-BR")}
+                              <td className="py-2.5 px-4 text-center text-xs text-gray-400">
+                                {squadSize} jog.
                               </td>
-                              <td className="py-2.5 px-4 text-right text-xs font-semibold text-gray-400">
+                              <td className="py-2.5 px-4 text-right text-xs font-semibold text-white">
+                                R$ {squadWage.toLocaleString("pt-BR")}
+                              </td>
+                              <td className="py-2.5 px-4 text-right text-xs text-gray-400">
+                                R$ {maxWageCap.toLocaleString("pt-BR")}
+                              </td>
+                              <td className="py-2.5 px-4 text-center text-xs">
+                                {isOverCap ? (
+                                  <span className="bg-red-500/10 text-red-400 px-2 py-0.5 rounded-full border border-red-500/20 font-bold">
+                                    ⚠️ Estourado
+                                  </span>
+                                ) : (
+                                  <span className="bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20 font-bold">
+                                    ✅ Regular
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-4 text-right text-xs font-semibold text-emerald-400">
                                 R$ {parseFloat(team.budget).toLocaleString("pt-BR")}
-                              </td>
-                              <td className="py-2.5 px-4">
-                                <input
-                                  type="number"
-                                  value={customDebits[team.id] || ""}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setCustomDebits((prev) => ({
-                                      ...prev,
-                                      [team.id]: val,
-                                    }));
-                                  }}
-                                  placeholder="0.00"
-                                  className="w-full bg-[#090d16] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white text-right focus:outline-none focus:border-emerald-500 font-bold"
-                                />
-                              </td>
-                              <td className={`py-2.5 px-4 text-right text-xs font-bold ${estimatedBudget < 0 ? "text-red-400" : "text-emerald-400"}`}>
-                                R$ {estimatedBudget.toLocaleString("pt-BR")}
                               </td>
                             </tr>
                           );
@@ -596,14 +542,13 @@ export default function AdminSeasonPage() {
 
                   <div className="flex flex-col md:flex-row justify-between items-center bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-4 gap-4">
                     <p className="text-[11px] text-emerald-400 max-w-lg text-left">
-                      💡 <strong>Dica do ADM:</strong> Os valores acima são preenchidos por padrão multiplicando a folha semanal por {roundsToCharge} semanas. Modifique diretamente os inputs de débito caso precise debitar menos, mais ou aplicar alguma taxa customizada para um time.
+                      💡 <strong>Importante:</strong> As folhas salariais dos elencos servem para regular a concorrência e definir a multa rescisória dos atletas. Os salários não são deduzidos dos saldos dos clubes ao fim da temporada.
                     </p>
                     <button
-                      onClick={handleProcessWages}
-                      disabled={processingWages}
-                      className="w-full md:w-auto rounded-xl bg-emerald-500 hover:bg-emerald-600 px-6 py-3 text-xs font-bold text-white transition-all active:scale-[0.98] disabled:opacity-50 flex-shrink-0"
+                      onClick={() => setShowModal(true)}
+                      className="w-full md:w-auto rounded-xl bg-emerald-500 hover:bg-emerald-600 px-6 py-3 text-xs font-bold text-white transition-all active:scale-[0.98] flex-shrink-0 whitespace-nowrap"
                     >
-                      {processingWages ? "Processando..." : "💵 Executar Cobrança de Salários"}
+                      🏁 Finalizar Temporada
                     </button>
                   </div>
                 </div>

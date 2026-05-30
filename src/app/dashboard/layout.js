@@ -16,6 +16,7 @@ export default function UserDashboardLayout({ children }) {
   // Estados de Notificações (Fase 4)
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [activeToast, setActiveToast] = useState(null);
 
   // Buscar notificações do usuário
   const loadNotifications = async (userId) => {
@@ -100,16 +101,49 @@ export default function UserDashboardLayout({ children }) {
     loadData();
   }, [router, pathname]);
 
-  // Polling para Notificações
+  // Realtime para Notificações & Toasts instantâneos
   useEffect(() => {
     if (!userProfile) return;
-    
+
+    // Subscrever canal Realtime
+    const channel = supabase
+      .channel(`user-notifications-${userProfile.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${userProfile.id}`,
+        },
+        (payload) => {
+          // 1. Recarregar notificações
+          loadNotifications(userProfile.id);
+
+          // 2. Disparar Toast na Tela
+          setActiveToast({
+            title: payload.new.title,
+            content: payload.new.content,
+          });
+
+          // 3. Auto-ocultar após 6 segundos
+          setTimeout(() => {
+            setActiveToast(null);
+          }, 6000);
+        }
+      )
+      .subscribe();
+
+    // Polling de 20s como Fallback
     const interval = setInterval(() => {
       loadNotifications(userProfile.id);
-    }, 10000);
+    }, 20000);
 
-    return () => clearInterval(interval);
-  }, [userProfile]); // Recarregar finanças ao mudar de página para manter atualizado
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
+  }, [userProfile]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -405,9 +439,26 @@ export default function UserDashboardLayout({ children }) {
         </div>
 
         {/* Conteúdo Dinâmico */}
-        <main className="p-6 md:p-8 max-w-7xl w-full mx-auto flex-1">
+        <main className="flex-1 p-6 lg:p-8">
           {children}
         </main>
+
+        {/* Toast flutuante Realtime */}
+        {activeToast && (
+          <div className="fixed bottom-5 right-5 z-50 max-w-sm rounded-xl border border-emerald-500/30 bg-[#090d16]/90 backdrop-blur-md p-4 shadow-2xl animate-slideIn flex gap-3 items-start border-l-4 border-l-[#10b981]">
+            <div className="text-[#10b981] text-base flex-shrink-0 pt-0.5">🔔</div>
+            <div className="min-w-0 flex-1 space-y-0.5">
+              <h4 className="text-xs font-bold text-white leading-tight">{activeToast.title}</h4>
+              <p className="text-[10px] text-gray-400 leading-normal">{activeToast.content}</p>
+            </div>
+            <button
+              onClick={() => setActiveToast(null)}
+              className="text-gray-500 hover:text-gray-300 text-xs font-bold px-1 transition-colors"
+            >
+              ×
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

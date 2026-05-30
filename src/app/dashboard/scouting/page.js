@@ -114,7 +114,7 @@ export default function Scouting() {
     }
 
     const confirmBuy = window.confirm(
-      `Deseja contratar ${player.name} por R$ ${parseFloat(player.value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}? \n(Salário Semanal: R$ ${player.wage.toLocaleString("pt-BR")})`
+      `Deseja contratar ${player.name} por R$ ${parseFloat(player.value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}? \n(Salário: R$ ${player.wage.toLocaleString("pt-BR")})`
     );
 
     if (!confirmBuy) return;
@@ -545,7 +545,7 @@ export default function Scouting() {
                     ) : (
                       <div className="space-y-2">
                         <div className="text-[10px] text-center text-gray-400">
-                          Multa Rescisória: <strong className="text-red-400">R$ {((player.buyout_clause && player.buyout_clause > 0 ? player.buyout_clause : player.value * 1.5) / 1000).toFixed(0)}k</strong>
+                          Multa Rescisória: <strong className="text-red-400">R$ {parseFloat(player.buyout_clause && player.buyout_clause > 0 ? player.buyout_clause : player.value * 1.5).toLocaleString("pt-BR")}</strong>
                         </div>
                         <button
                           onClick={() => handleBuyout(player)}
@@ -654,7 +654,7 @@ export default function Scouting() {
               {/* Divisão Salarial (Slider) */}
               <div>
                 <div className="flex justify-between items-center mb-1">
-                  <label className="block text-xs font-semibold text-gray-300">Divisão do Salário Semanal:</label>
+                  <label className="block text-xs font-semibold text-gray-300">Divisão do Salário:</label>
                   <span className="text-xs font-bold text-[#3b82f6]">{loanSalaryPct}% pago por você</span>
                 </div>
                 <input

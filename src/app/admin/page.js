@@ -61,8 +61,7 @@ export default function AdminDashboard() {
     const newStatus = !stats.marketWindowOpen;
 
     try {
-      // Para simplificar, atualizamos o status da temporada ativa no Supabase
-      // Se não houver temporada, podemos criar uma
+      // 1. Atualizar a temporada ativa no Supabase
       const { data: activeSeasons } = await supabase
         .from("seasons")
         .select("id")
@@ -81,12 +80,25 @@ export default function AdminDashboard() {
         ]);
       }
 
+      // 2. Sincronizar as tabelas de configurações globais
+      const settingsUpsert = [
+        { key: "negotiations_enabled", value: newStatus ? "true" : "false" },
+        { key: "salary_window_open", value: newStatus ? "true" : "false" },
+        { key: "trade_enabled", value: newStatus ? "true" : "false" },
+        { key: "loan_enabled", value: newStatus ? "true" : "false" },
+        { key: "buyout_enabled", value: newStatus ? "true" : "false" }
+      ];
+
+      await supabase
+        .from("settings")
+        .upsert(settingsUpsert, { onConflict: "key" });
+
       setStats((prev) => ({
         ...prev,
         marketWindowOpen: newStatus,
       }));
     } catch (err) {
-      alert("Erro ao atualizar a janela de transferências.");
+      alert("Erro ao atualizar a janela de transferências: " + err.message);
     } finally {
       setUpdatingWindow(false);
     }

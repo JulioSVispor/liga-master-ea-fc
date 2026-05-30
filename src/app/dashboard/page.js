@@ -32,6 +32,95 @@ export default function UserDashboard() {
   const [auctionSuccess, setAuctionSuccess] = useState("");
   const [savingAuction, setSavingAuction] = useState(false);
 
+  // Perfil do Jogador & Estatísticas de Carreira
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [selectedPlayerForProfile, setSelectedPlayerForProfile] = useState(null);
+  const [playerStats, setPlayerStats] = useState([]);
+  const [loadingStats, setLoadingStats] = useState(false);
+
+  const handleOpenPlayerProfile = async (player) => {
+    setSelectedPlayerForProfile(player);
+    setShowProfileModal(true);
+    setLoadingStats(true);
+    try {
+      const { data, error } = await supabase
+        .from("view_players_career_stats")
+        .select("*")
+        .eq("player_id", player.id)
+        .order("season_name", { ascending: true });
+
+      if (!error && data) {
+        setPlayerStats(data);
+      } else {
+        setPlayerStats([]);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar estatísticas do jogador:", err);
+      setPlayerStats([]);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
+  // Abas e Dados Financeiros
+  const [activeTab, setActiveTab] = useState("squad"); // "squad", "finances"
+  const [financialHistory, setFinancialHistory] = useState([]);
+  const [financialLoading, setFinancialLoading] = useState(false);
+
+  const loadFinancialData = async (teamId) => {
+    setFinancialLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("transfer_history")
+        .select("*")
+        .or(`from_team_id.eq.${teamId},to_team_id.eq.${teamId}`)
+        .order("created_at", { ascending: false });
+
+      if (!error && data) {
+        setFinancialHistory(data);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar historico financeiro:", err);
+    } finally {
+      setFinancialLoading(false);
+    }
+  };
+
+  const calculateFinancialTotals = () => {
+    let income = 0;
+    let expense = 0;
+    
+    // Categorias detalhadas
+    let salaries = 0;
+    let signings = 0;
+    let fines = 0;
+    let sales = 0;
+    let rewards = 0;
+    let sponsors = 0;
+
+    if (team) {
+      financialHistory.forEach((tx) => {
+        const amount = parseFloat(tx.amount || 0);
+        if (tx.from_team_id === team.id) {
+          // Despesa
+          expense += amount;
+          if (tx.transfer_type === "salary_charge") salaries += amount;
+          else if (tx.transfer_type === "fine") fines += amount;
+          else if (["buyout", "immediate_buy", "auction", "trade"].includes(tx.transfer_type)) signings += amount;
+        }
+        if (tx.to_team_id === team.id) {
+          // Receita
+          income += amount;
+          if (tx.transfer_type === "sponsorship") sponsors += amount;
+          else if (tx.transfer_type === "reward") rewards += amount;
+          else if (["buyout", "immediate_buy", "auction", "trade"].includes(tx.transfer_type)) sales += amount;
+        }
+      });
+    }
+
+    return { income, expense, salaries, signings, fines, sales, rewards, sponsors };
+  };
+
   // Carregar Settings
   const loadSettings = async () => {
     const { data } = await supabase.from("settings").select("key, value");
@@ -58,6 +147,7 @@ export default function UserDashboard() {
 
       if (teamData) {
         setTeam(teamData);
+        loadFinancialData(teamData.id);
 
         const { data: squad } = await supabase
           .from("players")
@@ -74,9 +164,33 @@ export default function UserDashboard() {
     }
   };
 
+  const [news, setNews] = useState([]);
+  const [newsLoading, setNewsLoading] = useState(true);
+
+  const loadNews = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("market_news")
+        .select(`
+          *,
+          teams!team_id(name)
+        `)
+        .order("created_at", { ascending: false })
+        .limit(6);
+      if (!error && data) {
+        setNews(data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setNewsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadClubData();
     loadSettings();
+    loadNews();
   }, []);
 
   const [uploadingShield, setUploadingShield] = useState(false);
@@ -580,7 +694,10 @@ export default function UserDashboard() {
                 >
                   {/* Foto do Jogador */}
                   <td className="py-2.5 px-4">
-                    <div className="h-10 w-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden mx-auto flex-shrink-0">
+                    <div 
+                      onClick={(e) => { e.stopPropagation(); handleOpenPlayerProfile(player); }}
+                      className="h-10 w-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden mx-auto flex-shrink-0 cursor-pointer hover:border-[#10b981] transition-all"
+                    >
                       {player.face_url ? (
                         <img
                           src={player.face_url}
@@ -597,7 +714,12 @@ export default function UserDashboard() {
                   {/* Nome e Informações Básicas */}
                   <td className="py-2.5 px-4 font-semibold text-white">
                     <div>
-                      <p className="text-sm font-bold text-white">{player.name}</p>
+                      <p 
+                        onClick={(e) => { e.stopPropagation(); handleOpenPlayerProfile(player); }}
+                        className="text-sm font-bold text-white hover:text-[#10b981] hover:underline cursor-pointer transition-colors"
+                      >
+                        {player.name}
+                      </p>
                       <p className="text-[10px] text-gray-400 font-normal">
                         {player.nation || "Desconhecida"} • {player.age || "--"} anos
                       </p>
@@ -632,13 +754,14 @@ export default function UserDashboard() {
                       {/* Ajuste Salarial */}
                       <button
                         title={salaryWindowOpen ? "Ajustar Salário" : "Ajustar Salário (Janela Fechada)"}
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation();
                           setSelectedPlayerForSalary(player);
                           setNewSalary("");
                           setSalaryError("");
                           setSalarySuccess("");
                           setShowSalaryModal(true);
+                          await loadSettings();
                         }}
                         className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all border ${
                           salaryWindowOpen
@@ -788,7 +911,7 @@ export default function UserDashboard() {
 
         <div className="glass-card p-5 rounded-2xl">
           <span className="text-xs font-semibold text-gray-400 block mb-1">
-            Folha Salarial Semanal
+            Folha Salarial
           </span>
           <p className="text-2xl font-black text-gray-200">
             R$ {squadWages.toLocaleString("pt-BR")}
@@ -817,8 +940,126 @@ export default function UserDashboard() {
         </div>
       </div>
 
-      {/* Campo Visual Tático */}
-      <div className="glass-panel p-6 sm:p-8 rounded-2xl border border-white/5 bg-[#090d16]/75 space-y-6">
+      {/* Mural de Notícias do Mercado */}
+      {news.length > 0 && (
+        <div className="glass-panel p-6 rounded-2xl border border-white/5 bg-[#090d16]/75 space-y-6">
+          <div className="flex items-center gap-2 border-b border-white/5 pb-4">
+            <span className="text-xl">📰</span>
+            <div>
+              <h2 className="text-lg font-bold text-white tracking-tight">Mural de Notícias da Liga</h2>
+              <p className="text-xs text-gray-400">Últimos comunicados, transferências e movimentações do mercado.</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            {/* Manchete Principal (Destaque) */}
+            <div className="lg:col-span-3 p-5 rounded-2xl bg-gradient-to-br from-white/[0.02] to-white/[0.05] border border-white/5 hover:border-white/10 transition-all duration-300 flex flex-col justify-between min-h-[260px]">
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase border ${
+                    news[0].category === 'transfer' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                    news[0].category === 'stage' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                    news[0].category === 'finance' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                    news[0].category === 'auction' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
+                    'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                  }`}>
+                    {news[0].category === 'transfer' ? 'Transferência' :
+                     news[0].category === 'stage' ? 'Fase da Liga' :
+                     news[0].category === 'finance' ? 'Financeiro' :
+                     news[0].category === 'auction' ? 'Leilão' : 'Comunicado'}
+                  </span>
+                  <span className="text-[10px] text-gray-500">
+                    {new Date(news[0].created_at).toLocaleDateString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  {news[0].badge_url && (
+                    <img src={news[0].badge_url} alt="" className="w-16 h-16 object-contain bg-white/5 rounded-xl p-2 border border-white/10 flex-shrink-0 animate-pulse" />
+                  )}
+                  {news[0].player_face_url && !news[0].badge_url && (
+                    <img src={news[0].player_face_url} alt="" className="w-16 h-16 object-cover bg-white/5 rounded-full border border-white/10 flex-shrink-0" />
+                  )}
+                  <div className="space-y-1">
+                    <h3 className="text-base sm:text-lg font-extrabold text-white leading-tight">
+                      {news[0].title}
+                    </h3>
+                    <p className="text-xs text-gray-400 leading-relaxed pt-1">
+                      {news[0].content}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-white/5 pt-4 mt-4 flex justify-between items-center text-[10px] text-gray-500">
+                <span>Fontes oficiais do campeonato</span>
+                <span className="font-semibold text-gray-400 flex items-center gap-1">
+                  🟢 Notícias em Tempo Real
+                </span>
+              </div>
+            </div>
+
+            {/* Outras Notícias (Lista Rápida) */}
+            <div className="lg:col-span-2 space-y-3 max-h-[260px] overflow-y-auto pr-1">
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Últimas Manchetes</h3>
+              {news.slice(1).length === 0 ? (
+                <p className="text-gray-500 text-xs italic">Aguardando mais movimentações no mercado...</p>
+              ) : (
+                news.slice(1).map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-3 rounded-xl border border-white/5 bg-white/[0.01] hover:bg-white/[0.03] transition-all flex items-start gap-3 duration-200"
+                  >
+                    {item.badge_url ? (
+                      <img src={item.badge_url} alt="" className="w-8 h-8 object-contain bg-white/5 rounded p-1 border border-white/5 flex-shrink-0" />
+                    ) : item.player_face_url ? (
+                      <img src={item.player_face_url} alt="" className="w-8 h-8 object-cover bg-white/5 rounded-full border border-white/5 flex-shrink-0" />
+                    ) : (
+                      <div className="w-8 h-8 rounded bg-white/5 flex items-center justify-center text-sm flex-shrink-0">📰</div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-bold text-white leading-snug truncate">{item.title}</p>
+                      <p className="text-[10px] text-gray-400 leading-snug line-clamp-1 mt-0.5">{item.content}</p>
+                      <span className="text-[9px] text-gray-500 block mt-1">
+                        {new Date(item.created_at).toLocaleDateString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Controle de Abas */}
+      <div className="flex border-b border-white/5 gap-2 mt-4">
+        <button
+          onClick={() => setActiveTab("squad")}
+          className={`px-6 py-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 ${
+            activeTab === "squad"
+              ? "border-[#10b981] text-[#10b981]"
+              : "border-transparent text-gray-400 hover:text-white"
+          }`}
+        >
+          📋 Elenco & Tática
+        </button>
+        <button
+          onClick={() => setActiveTab("finances")}
+          className={`px-6 py-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 ${
+            activeTab === "finances"
+              ? "border-[#10b981] text-[#10b981]"
+              : "border-transparent text-gray-400 hover:text-white"
+          }`}
+        >
+          💵 Finanças & Fluxo de Caixa
+        </button>
+      </div>
+
+      {activeTab === "squad" && (
+        <>
+          {/* Campo Visual Tático */}
+          <div className="glass-panel p-6 sm:p-8 rounded-2xl border border-white/5 bg-[#090d16]/75 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-white/5 pb-4">
           <div>
             <h2 className="text-lg font-bold text-white">Esquema Tático</h2>
@@ -1105,6 +1346,185 @@ export default function UserDashboard() {
           </div>
         )}
       </div>
+      </>
+      )}
+
+      {/* Aba de Finanças e Fluxo de Caixa */}
+      {activeTab === "finances" && (
+        <div className="space-y-6">
+          {/* Resumo Financeiro da Temporada */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Receitas Totais */}
+            <div className="glass-panel p-5 rounded-2xl border border-white/5 bg-[#090d16]/75">
+              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Receitas Acumuladas</span>
+              <p className="text-xl font-black text-emerald-400">
+                R$ {calculateFinancialTotals().income.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              </p>
+              <div className="text-[10px] text-gray-400 mt-2 space-y-1">
+                <div className="flex justify-between"><span>Patrocínios:</span><span className="font-semibold text-white">R$ {calculateFinancialTotals().sponsors.toLocaleString("pt-BR")}</span></div>
+                <div className="flex justify-between"><span>Bônus/Prêmios:</span><span className="font-semibold text-white">R$ {calculateFinancialTotals().rewards.toLocaleString("pt-BR")}</span></div>
+                <div className="flex justify-between"><span>Vendas de Jogadores:</span><span className="font-semibold text-white">R$ {calculateFinancialTotals().sales.toLocaleString("pt-BR")}</span></div>
+              </div>
+            </div>
+
+            {/* Despesas Totais */}
+            <div className="glass-panel p-5 rounded-2xl border border-white/5 bg-[#090d16]/75">
+              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Despesas Acumuladas</span>
+              <p className="text-xl font-black text-red-400">
+                R$ {calculateFinancialTotals().expense.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              </p>
+              <div className="text-[10px] text-gray-400 mt-2 space-y-1">
+                <div className="flex justify-between"><span>Folhas Salariais:</span><span className="font-semibold text-white">R$ {calculateFinancialTotals().salaries.toLocaleString("pt-BR")}</span></div>
+                <div className="flex justify-between"><span>Compras/Multas Pagas:</span><span className="font-semibold text-white">R$ {calculateFinancialTotals().signings.toLocaleString("pt-BR")}</span></div>
+                <div className="flex justify-between"><span>Multas de Indisciplina:</span><span className="font-semibold text-white">R$ {calculateFinancialTotals().fines.toLocaleString("pt-BR")}</span></div>
+              </div>
+            </div>
+
+            {/* Saldo Líquido da Temporada */}
+            <div className="glass-panel p-5 rounded-2xl border border-white/5 bg-[#090d16]/75 flex flex-col justify-between">
+              <div>
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Balanço Líquido (Fluxo)</span>
+                <p className={`text-2xl font-black ${calculateFinancialTotals().income - calculateFinancialTotals().expense >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  R$ {(calculateFinancialTotals().income - calculateFinancialTotals().expense).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <span className="text-[9px] text-gray-500 mt-2">
+                Saldo do fluxo líquido financeiro da temporada atual.
+              </span>
+            </div>
+          </div>
+
+          {/* Gráficos de Fluxo Dinâmicos SVG */}
+          <div className="glass-panel p-6 sm:p-8 rounded-2xl border border-white/5 bg-[#090d16]/75 grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
+            {/* Gráfico Comparativo SVG */}
+            <div className="space-y-4">
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider">Comparativo Receitas vs Despesas</h4>
+              <div className="h-44 w-full flex items-end gap-12 justify-center pb-4 border-b border-white/5 relative">
+                {/* Linhas de Grade de fundo */}
+                <div className="absolute inset-x-0 bottom-4 border-b border-white/5"></div>
+                <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 border-b border-white/5"></div>
+                <div className="absolute inset-x-0 top-4 border-b border-white/5"></div>
+
+                {/* Coluna Receitas */}
+                <div className="flex flex-col items-center gap-2 z-10 w-20">
+                  <div
+                    className="w-full bg-[#10b981]/80 hover:bg-[#10b981] rounded-t-lg transition-all duration-700 shadow-[0_0_15px_rgba(16,185,129,0.2)]"
+                    style={{
+                      height: `${Math.max(10, Math.min(100, (calculateFinancialTotals().income / Math.max(1, calculateFinancialTotals().income + calculateFinancialTotals().expense)) * 140))}px`
+                    }}
+                  ></div>
+                  <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider">Receitas</span>
+                </div>
+
+                {/* Coluna Despesas */}
+                <div className="flex flex-col items-center gap-2 z-10 w-20">
+                  <div
+                    className="w-full bg-red-500/80 hover:bg-red-500 rounded-t-lg transition-all duration-700 shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+                    style={{
+                      height: `${Math.max(10, Math.min(100, (calculateFinancialTotals().expense / Math.max(1, calculateFinancialTotals().income + calculateFinancialTotals().expense)) * 140))}px`
+                    }}
+                  ></div>
+                  <span className="text-[9px] font-bold text-red-400 uppercase tracking-wider">Despesas</span>
+                </div>
+              </div>
+              <p className="text-[10px] text-gray-500 text-center">Visão comparativa simplificada de fluxo</p>
+            </div>
+
+            {/* Detalhamento do Caixa em SVG */}
+            <div className="space-y-4">
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider">Detalhamento dos Recursos</h4>
+              <div className="space-y-3 pt-2">
+                {/* Salários */}
+                <div>
+                  <div className="flex justify-between text-[10px] text-gray-400 mb-1">
+                    <span>Folhas de Elenco (Despesa)</span>
+                    <span>R$ {calculateFinancialTotals().salaries.toLocaleString("pt-BR")}</span>
+                  </div>
+                  <div className="w-full bg-white/5 rounded-full h-2">
+                    <div className="bg-red-400 h-full rounded-full" style={{ width: `${Math.min(100, (calculateFinancialTotals().salaries / Math.max(1, calculateFinancialTotals().expense)) * 100)}%` }}></div>
+                  </div>
+                </div>
+
+                {/* Contratações */}
+                <div>
+                  <div className="flex justify-between text-[10px] text-gray-400 mb-1">
+                    <span>Contratações de Jogadores (Despesa)</span>
+                    <span>R$ {calculateFinancialTotals().signings.toLocaleString("pt-BR")}</span>
+                  </div>
+                  <div className="w-full bg-white/5 rounded-full h-2">
+                    <div className="bg-orange-400 h-full rounded-full" style={{ width: `${Math.min(100, (calculateFinancialTotals().signings / Math.max(1, calculateFinancialTotals().expense)) * 100)}%` }}></div>
+                  </div>
+                </div>
+
+                {/* Patrocínios */}
+                <div>
+                  <div className="flex justify-between text-[10px] text-gray-400 mb-1">
+                    <span>Rendas de Patrocinadores (Receita)</span>
+                    <span>R$ {calculateFinancialTotals().sponsors.toLocaleString("pt-BR")}</span>
+                  </div>
+                  <div className="w-full bg-white/5 rounded-full h-2">
+                    <div className="bg-emerald-400 h-full rounded-full" style={{ width: `${Math.min(100, (calculateFinancialTotals().sponsors / Math.max(1, calculateFinancialTotals().income)) * 100)}%` }}></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Extrato Financeiro */}
+          <div className="glass-panel p-6 sm:p-8 rounded-2xl border border-white/5 bg-[#090d16]/75 space-y-4 text-left">
+            <h3 className="text-base font-bold text-white">🧾 Extrato Financeiro do Clube</h3>
+            {financialHistory.length === 0 ? (
+              <p className="text-gray-500 text-xs py-4 text-center">Nenhuma transação financeira registrada para este clube.</p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-white/5 bg-[#090d16]/20">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-white/[0.02] border-b border-white/5 text-[9px] font-bold text-gray-500 uppercase tracking-wider">
+                      <th className="py-2.5 px-4">Data</th>
+                      <th className="py-2.5 px-4">Tipo</th>
+                      <th className="py-2.5 px-4">Transação / Histórico</th>
+                      <th className="py-2.5 px-4 text-right">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-gray-300">
+                    {financialHistory.map((tx) => {
+                      const isIncome = tx.to_team_id === team.id;
+                      return (
+                        <tr key={tx.id} className="hover:bg-white/[0.01] transition-colors">
+                          <td className="py-2.5 px-4 text-gray-500">{new Date(tx.created_at).toLocaleDateString("pt-BR")}</td>
+                          <td className="py-2.5 px-4">
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${
+                              tx.transfer_type === 'salary_charge' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                              tx.transfer_type === 'sponsorship' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                              tx.transfer_type === 'reward' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                              isIncome ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'
+                            }`}>
+                              {tx.transfer_type === 'salary_charge' ? 'Folha Salarial' :
+                               tx.transfer_type === 'sponsorship' ? 'Patrocínio' :
+                               tx.transfer_type === 'reward' ? 'Premiação' :
+                               tx.transfer_type === 'fine' ? 'Multa' :
+                               isIncome ? 'Venda de Jogador' : 'Compra de Jogador'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-4">
+                            <p className="font-semibold text-white">{tx.player_name || 'Transação do Clube'}</p>
+                            <p className="text-[10px] text-gray-500">
+                              {isIncome ? `Recebido de: ${tx.from_team_name || 'Liga'}` : `Pago para: ${tx.to_team_name || 'Liga'}`}
+                            </p>
+                          </td>
+                          <td className={`py-2.5 px-4 text-right font-extrabold ${isIncome ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {isIncome ? '+' : '-'} R$ {parseFloat(tx.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Modal de Ajuste Salarial */}
       {showSalaryModal && selectedPlayerForSalary && (
@@ -1341,6 +1761,97 @@ export default function UserDashboard() {
               >
                 {savingAuction ? "Enviando..." : "SIM, enviar"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal de Perfil de Jogador */}
+      {showProfileModal && selectedPlayerForProfile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="glass-panel w-full max-w-lg rounded-2xl border border-white/10 bg-[#090d16]/95 shadow-2xl overflow-hidden animate-scaleIn flex flex-col max-h-[90vh]">
+            {/* Header com Foto de Destaque */}
+            <div className="relative p-6 bg-gradient-to-b from-[#10b981]/15 to-transparent border-b border-white/5 flex gap-4 items-center">
+              <div className="h-16 w-16 rounded-full bg-white/5 border border-[#10b981]/30 flex items-center justify-center overflow-hidden flex-shrink-0 shadow-lg">
+                {selectedPlayerForProfile.face_url ? (
+                  <img src={selectedPlayerForProfile.face_url} alt="" className="h-full w-full object-cover scale-110" />
+                ) : (
+                  <span className="text-3xl">👤</span>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-black text-white">{selectedPlayerForProfile.name}</span>
+                  <span className="px-2 py-0.5 rounded bg-[#10b981]/20 text-[#10b981] font-bold text-xs">
+                    {selectedPlayerForProfile.rating}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-400 mt-1 uppercase font-bold tracking-wider">
+                  {selectedPlayerForProfile.position} • {selectedPlayerForProfile.age || '--'} anos • {selectedPlayerForProfile.nation || 'Nacionalidade N/A'}
+                </p>
+              </div>
+              <button
+                onClick={() => { setShowProfileModal(false); setSelectedPlayerForProfile(null); }}
+                className="text-gray-400 hover:text-white text-xs bg-white/5 hover:bg-white/10 rounded-lg px-2.5 py-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Abas / Conteúdo */}
+            <div className="flex-1 p-6 overflow-y-auto space-y-6">
+              {/* Informações Básicas do Jogador */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3.5 rounded-xl border border-white/5 bg-white/[0.01]">
+                  <span className="text-[10px] text-gray-500 block">Salário</span>
+                  <p className="text-sm font-bold text-emerald-400 mt-0.5">
+                    R$ {parseFloat(selectedPlayerForProfile.wage || 0).toLocaleString('pt-BR')}
+                  </p>
+                </div>
+                <div className="p-3.5 rounded-xl border border-white/5 bg-white/[0.01]">
+                  <span className="text-[10px] text-gray-500 block">Passe de Mercado</span>
+                  <p className="text-sm font-bold text-blue-400 mt-0.5">
+                    R$ {parseFloat(selectedPlayerForProfile.value || 0).toLocaleString('pt-BR')}
+                  </p>
+                </div>
+              </div>
+
+              {/* Histórico de Estatísticas na Liga */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider">📊 Histórico na Liga Master</h4>
+                {loadingStats ? (
+                  <div className="py-8 text-center">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#10b981] border-t-transparent mx-auto"></div>
+                  </div>
+                ) : playerStats.length === 0 ? (
+                  <div className="text-center py-8 rounded-xl border border-white/5 bg-white/[0.01]">
+                    <span className="text-lg block mb-1">⚽</span>
+                    <p className="text-xs text-gray-500">Sem estatísticas registradas em campeonatos oficiais.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-white/5 bg-[#090d16]/30">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-white/[0.02] border-b border-white/5 text-[9px] font-bold text-gray-500 uppercase tracking-wider">
+                          <th className="py-2.5 px-3">Temporada</th>
+                          <th className="py-2.5 px-3 text-center">⚽ Gols</th>
+                          <th className="py-2.5 px-3 text-center">🎯 Assist</th>
+                          <th className="py-2.5 px-3 text-center">⭐ MOTM</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5 text-gray-300">
+                        {playerStats.map((stat, idx) => (
+                          <tr key={idx} className="hover:bg-white/[0.01]">
+                            <td className="py-2.5 px-3 font-semibold text-white">{stat.season_name}</td>
+                            <td className="py-2.5 px-3 text-center font-bold text-emerald-400">{stat.goals}</td>
+                            <td className="py-2.5 px-3 text-center font-bold text-blue-400">{stat.assists}</td>
+                            <td className="py-2.5 px-3 text-center font-bold text-amber-400">{stat.motm_count}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

@@ -3,6 +3,25 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 
+// ─── Tooltip ℹ️ ─────────────────────────────────
+function Tooltip({ content }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <span 
+      className="relative inline-block ml-1 cursor-pointer group text-gray-500 hover:text-white select-none z-10"
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+    >
+      ℹ️
+      {visible && (
+        <span className="absolute z-[100] w-56 p-3 text-[10px] font-normal text-gray-200 bg-[#0c101d] border border-white/10 rounded-xl shadow-2xl top-6 left-1/2 -translate-x-1/2 leading-relaxed transition-opacity animate-fadeIn normal-case whitespace-normal">
+          {content}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState("profile"); // 'profile' | 'security' | 'team'
   const [loading, setLoading] = useState(true);
@@ -267,7 +286,10 @@ export default function ProfilePage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-gray-300">Nome de Exibição / Treinador</label>
+                <label className="text-xs font-semibold text-gray-300">
+                  Nome de Exibição / Treinador
+                  <Tooltip content="O nome visível para outros participantes da liga na tabela e histórico de transferências." />
+                </label>
                 <input
                   type="text"
                   value={displayName}
@@ -279,7 +301,10 @@ export default function ProfilePage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-gray-300">WhatsApp (Opcional)</label>
+                <label className="text-xs font-semibold text-gray-300">
+                  WhatsApp (Opcional)
+                  <Tooltip content="Seu telefone de contato. Facilita que outros participantes da liga negociem diretamente com você via WhatsApp." />
+                </label>
                 <input
                   type="text"
                   value={whatsapp}
@@ -364,7 +389,10 @@ export default function ProfilePage() {
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-gray-300">Nome do Time (Personalizado)</label>
+                    <label className="text-xs font-semibold text-gray-300">
+                      Nome do Time (Personalizado)
+                      <Tooltip content="O nome fictício do seu time na liga (ex: Real da Massa FC)." />
+                    </label>
                     <input
                       type="text"
                       value={teamName}
@@ -376,7 +404,10 @@ export default function ProfilePage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-gray-300">Time do EA FC 26 Correspondente</label>
+                    <label className="text-xs font-semibold text-gray-300">
+                      Time do EA FC 26 Correspondente
+                      <Tooltip content="O clube real correspondente no simulador (ex: Real Madrid, Arsenal)." />
+                    </label>
                     <input
                       type="text"
                       value={realClubName}
@@ -388,7 +419,10 @@ export default function ProfilePage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-gray-300">Formação Tática Padrão</label>
+                    <label className="text-xs font-semibold text-gray-300">
+                      Formação Tática Padrão
+                      <Tooltip content="O esquema tático padrão da sua equipe titular." />
+                    </label>
                     <select
                       value={formation}
                       onChange={(e) => setFormation(e.target.value)}
@@ -405,7 +439,10 @@ export default function ProfilePage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-gray-300">URL do Escudo (Badge)</label>
+                    <label className="text-xs font-semibold text-gray-300">
+                      URL do Escudo (Badge)
+                      <Tooltip content="Link direto da imagem para o brasão/escudo do seu clube." />
+                    </label>
                     <input
                       type="url"
                       value={badgeUrl}
@@ -416,7 +453,10 @@ export default function ProfilePage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-gray-300">URL do Uniforme (Jersey)</label>
+                    <label className="text-xs font-semibold text-gray-300">
+                      URL do Uniforme (Jersey)
+                      <Tooltip content="Link direto da imagem para o uniforme oficial de jogo do seu clube." />
+                    </label>
                     <input
                       type="url"
                       value={uniformUrl}

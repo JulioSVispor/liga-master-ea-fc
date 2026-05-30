@@ -22,7 +22,7 @@ const MENU_GROUPS = [
   {
     label: "PESSOAS & TIMES",
     items: [
-      { name: "Usuários & Times", path: "/admin/users", icon: "👥" },
+      { name: "Treinadores & Equipes", path: "/admin/users", icon: "👥" },
       { name: "Participantes", path: "/admin/invites", icon: "✉️" },
       { name: "Lista de Espera", path: "/admin/waitlist", icon: "📋" },
       { name: "Arbitragem", path: "/admin/arbitration", icon: "⚖️" },

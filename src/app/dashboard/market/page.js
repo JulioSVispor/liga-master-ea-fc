@@ -3,12 +3,46 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
+// ─── Tooltip ℹ️ ─────────────────────────────────
+function Tooltip({ content }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <span 
+      className="relative inline-block ml-1 cursor-pointer group text-gray-500 hover:text-white select-none z-10"
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+    >
+      ℹ️
+      {visible && (
+        <span className="absolute z-[100] w-64 p-3 text-[10px] font-normal text-gray-200 bg-[#0c101d] border border-white/10 rounded-xl shadow-2xl top-6 left-1/2 -translate-x-1/2 leading-relaxed transition-opacity animate-fadeIn normal-case whitespace-normal">
+          {content}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export default function Market() {
   const [activeTab, setActiveTab] = useState("global"); // global, sell, trades
   const [loading, setLoading] = useState(true);
   const [myTeam, setMyTeam] = useState(null);
   const [marketListings, setMarketListings] = useState([]);
   const [mySquad, setMySquad] = useState([]);
+
+  // Estados para Toasts & Confirmações customizadas (Glassmorphism dark theme)
+  const [toast, setToast] = useState(null); // { message: string, type: "success" | "error" | "info" }
+  const [confirmModal, setConfirmModal] = useState(null); // { title: string, message: string, onConfirm: () => void, onCancel?: () => void }
+
+  const showToast = (message, type = "success") => {
+    setToast({ message, type });
+  };
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
   
   // Estados para Leilão e Compra Imediata
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
@@ -194,88 +228,95 @@ export default function Market() {
       setNewMessage("");
       await loadChatMessages(activeChat);
     } catch (err) {
-      alert("Erro ao enviar mensagem: " + err.message);
+      showToast("Erro ao enviar mensagem: " + err.message, "error");
     }
   };
 
   // Aceitar Empréstimo
   const handleAcceptLoan = async (loanId) => {
-    const confirmAccept = window.confirm(
-      "Deseja aceitar esta proposta de empréstimo? O jogador será transferido temporariamente para o time de destino e o salário dividido conforme o acordo."
-    );
-    if (!confirmAccept) return;
+    setConfirmModal({
+      title: "Aceitar Empréstimo",
+      message: "Deseja aceitar esta proposta de empréstimo? O jogador será transferido temporariamente para o time de destino e o salário dividido conforme o acordo.",
+      onConfirm: async () => {
+        setActionLoading(loanId);
+        try {
+          const { data, error } = await supabase.rpc("accept_loan_offer", {
+            p_offer_id: loanId,
+          });
 
-    setActionLoading(loanId);
-    try {
-      const { data, error } = await supabase.rpc("accept_loan_offer", {
-        p_offer_id: loanId,
-      });
+          if (error) throw error;
 
-      if (error) throw error;
-
-      if (data && data.success) {
-        alert(data.message);
-        const { data: teamData } = await supabase
-          .from("teams")
-          .select("*")
-          .eq("id", myTeam.id)
-          .single();
-        setMyTeam(teamData);
-        await loadTradesData(myTeam.id);
-      } else {
-        alert(data.message || "Erro desconhecido ao aceitar o empréstimo.");
+          if (data && data.success) {
+            showToast(data.message, "success");
+            const { data: teamData } = await supabase
+              .from("teams")
+              .select("*")
+              .eq("id", myTeam.id)
+              .single();
+            setMyTeam(teamData);
+            await loadTradesData(myTeam.id);
+          } else {
+            showToast(data.message || "Erro desconhecido ao aceitar o empréstimo.", "error");
+          }
+        } catch (err) {
+          showToast("Erro ao finalizar empréstimo: " + err.message, "error");
+        } finally {
+          setActionLoading(null);
+        }
       }
-    } catch (err) {
-      alert("Erro ao finalizar empréstimo: " + err.message);
-    } finally {
-      setActionLoading(null);
-    }
+    });
   };
 
   // Rejeitar Empréstimo
   const handleRejectLoan = async (loanId) => {
-    const confirmReject = window.confirm("Deseja recusar esta proposta de empréstimo?");
-    if (!confirmReject) return;
+    setConfirmModal({
+      title: "Recusar Empréstimo",
+      message: "Deseja recusar esta proposta de empréstimo?",
+      onConfirm: async () => {
+        setActionLoading(loanId);
+        try {
+          const { error } = await supabase
+            .from("loan_offers")
+            .update({ status: "rejected" })
+            .eq("id", loanId);
 
-    setActionLoading(loanId);
-    try {
-      const { error } = await supabase
-        .from("loan_offers")
-        .update({ status: "rejected" })
-        .eq("id", loanId);
+          if (error) throw error;
 
-      if (error) throw error;
-
-      alert("Proposta de empréstimo recusada!");
-      await loadTradesData(myTeam.id);
-    } catch (err) {
-      alert("Erro ao recusar: " + err.message);
-    } finally {
-      setActionLoading(null);
-    }
+          showToast("Proposta de empréstimo recusada!", "success");
+          await loadTradesData(myTeam.id);
+        } catch (err) {
+          showToast("Erro ao recusar: " + err.message, "error");
+        } finally {
+          setActionLoading(null);
+        }
+      }
+    });
   };
 
   // Cancelar Empréstimo
   const handleCancelLoan = async (loanId) => {
-    const confirmCancel = window.confirm("Deseja cancelar esta proposta de empréstimo enviada?");
-    if (!confirmCancel) return;
+    setConfirmModal({
+      title: "Cancelar Empréstimo",
+      message: "Deseja cancelar esta proposta de empréstimo enviada?",
+      onConfirm: async () => {
+        setActionLoading(loanId);
+        try {
+          const { error } = await supabase
+            .from("loan_offers")
+            .update({ status: "cancelled" })
+            .eq("id", loanId);
 
-    setActionLoading(loanId);
-    try {
-      const { error } = await supabase
-        .from("loan_offers")
-        .update({ status: "cancelled" })
-        .eq("id", loanId);
+          if (error) throw error;
 
-      if (error) throw error;
-
-      alert("Proposta de empréstimo cancelada!");
-      await loadTradesData(myTeam.id);
-    } catch (err) {
-      alert("Erro ao cancelar: " + err.message);
-    } finally {
-      setActionLoading(null);
-    }
+          showToast("Proposta de empréstimo cancelada!", "success");
+          await loadTradesData(myTeam.id);
+        } catch (err) {
+          showToast("Erro ao cancelar: " + err.message, "error");
+        } finally {
+          setActionLoading(null);
+        }
+      }
+    });
   };
 
   // Carregar o elenco do time alvo selecionado para troca
@@ -296,7 +337,7 @@ export default function Market() {
         .order("rating", { ascending: false });
       setTargetSquad(squad || []);
     } catch (err) {
-      alert("Erro ao buscar elenco adversário.");
+      showToast("Erro ao buscar elenco adversário.", "error");
     }
   };
 
@@ -304,100 +345,98 @@ export default function Market() {
   const handleCreateListing = async (e) => {
     e.preventDefault();
     if (!myTeam || !selectedPlayerId || !price) {
-      alert("Por favor, preencha todos os campos do anúncio.");
+      showToast("Por favor, preencha todos os campos do anúncio.", "error");
       return;
     }
 
     const priceNum = parseFloat(price);
     if (isNaN(priceNum) || priceNum <= 0) {
-      alert("Preço inválido.");
+      showToast("Preço inválido.", "error");
       return;
     }
 
     const player = mySquad.find((p) => p.id.toString() === selectedPlayerId.toString());
     if (!player) return;
 
-    const confirmList = window.confirm(
-      `Deseja listar ${player.name} no mercado por R$ ${priceNum.toLocaleString("pt-BR")}? \nEle sairá do seu elenco disponível para jogos enquanto estiver anunciado.`
-    );
+    setConfirmModal({
+      title: "Anunciar Jogador",
+      message: `Deseja listar ${player.name} no mercado por R$ ${priceNum.toLocaleString("pt-BR")}? \nEle sairá do seu elenco disponível para jogos enquanto estiver anunciado.`,
+      onConfirm: async () => {
+        setListingLoading(true);
+        try {
+          const expirationDate = new Date();
+          expirationDate.setHours(expirationDate.getHours() + parseInt(durationHours));
 
-    if (!confirmList) return;
+          // 1. Criar listagem
+          const { error: listError } = await supabase
+            .from("market_listings")
+            .insert([
+              {
+                player_id: player.id,
+                seller_team_id: myTeam.id,
+                listing_type: listingType,
+                price: priceNum,
+                buyout_price: buyoutPrice ? parseFloat(buyoutPrice) : null,
+                status: "active",
+                end_date: listingType === "auction" ? expirationDate.toISOString() : null,
+              },
+            ]);
 
-    setListingLoading(true);
+          if (listError) throw listError;
 
-    try {
-      const expirationDate = new Date();
-      expirationDate.setHours(expirationDate.getHours() + parseInt(durationHours));
+          // 2. Desvincular jogador do time
+          const { error: playerError } = await supabase
+            .from("players")
+            .update({ team_id: null })
+            .eq("id", player.id);
 
-      // 1. Criar listagem
-      const { error: listError } = await supabase
-        .from("market_listings")
-        .insert([
-          {
-            player_id: player.id,
-            seller_team_id: myTeam.id,
-            listing_type: listingType,
-            price: priceNum,
-            buyout_price: buyoutPrice ? parseFloat(buyoutPrice) : null,
-            status: "active",
-            end_date: listingType === "auction" ? expirationDate.toISOString() : null,
-          },
-        ]);
+          if (playerError) throw playerError;
 
-      if (listError) throw listError;
-
-      // 2. Desvincular jogador do time
-      const { error: playerError } = await supabase
-        .from("players")
-        .update({ team_id: null })
-        .eq("id", player.id);
-
-      if (playerError) throw playerError;
-
-      alert("Jogador anunciado com sucesso!");
-      setSelectedPlayerId("");
-      setPrice("");
-      setBuyoutPrice("");
-      setActiveTab("global");
-    } catch (err) {
-      alert("Erro ao anunciar jogador: " + err.message);
-    } finally {
-      setListingLoading(false);
-    }
+          showToast("Jogador anunciado com sucesso!", "success");
+          setSelectedPlayerId("");
+          setPrice("");
+          setBuyoutPrice("");
+          setActiveTab("global");
+        } catch (err) {
+          showToast("Erro ao anunciar jogador: " + err.message, "error");
+        } finally {
+          setListingLoading(false);
+        }
+      }
+    });
   };
 
   // Comprar anúncio de compra imediata
   const handleBuyListing = async (listing) => {
     if (!myTeam) return;
 
-    const confirmBuy = window.confirm(
-      `Deseja comprar ${listing.players.name} por R$ ${parseFloat(listing.price).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}?`
-    );
+    setConfirmModal({
+      title: "Comprar Jogador",
+      message: `Deseja comprar ${listing.players.name} por R$ ${parseFloat(listing.price).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}?`,
+      onConfirm: async () => {
+        setActionLoading(listing.id);
+        try {
+          const { data, error } = await supabase.rpc("buy_market_listing", {
+            p_listing_id: listing.id,
+            p_buyer_team_id: myTeam.id,
+          });
 
-    if (!confirmBuy) return;
+          if (error) throw error;
 
-    setActionLoading(listing.id);
-
-    try {
-      const { data, error } = await supabase.rpc("buy_market_listing", {
-        p_listing_id: listing.id,
-        p_buyer_team_id: myTeam.id,
-      });
-
-      if (error) throw error;
-
-      if (data && data.success) {
-        alert(data.message);
-        setMyTeam((prev) => ({ ...prev, budget: prev.budget - listing.price }));
-        setMarketListings((prev) => prev.filter((item) => item.id !== listing.id));
-      } else {
-        alert(data.message || "Erro ao tentar comprar.");
+          if (data && data.success) {
+            showToast(data.message, "success");
+            setMyTeam((prev) => ({ ...prev, budget: prev.budget - listing.price }));
+            setMarketListings((prev) => prev.filter((item) => item.id !== listing.id));
+          } else {
+            showToast(data.message || "Erro ao tentar comprar.", "error");
+          }
+        } catch (err) {
+          showToast("Falha na compra: " + err.message, "error");
+        } finally {
+          setActionLoading(null);
+        }
       }
-    } catch (err) {
-      alert("Falha na compra: " + err.message);
-    } finally {
-      setActionLoading(null);
-    }
+    });
   };
 
   // Dar lance no leilão
@@ -406,86 +445,84 @@ export default function Market() {
 
     const bidVal = bidAmounts[listing.id];
     if (!bidVal) {
-      alert("Insira um valor de lance.");
+      showToast("Insira um valor de lance.", "error");
       return;
     }
 
     const bidNum = parseFloat(bidVal);
     if (isNaN(bidNum) || bidNum <= listing.price) {
-      alert(`O lance deve ser maior que o valor mínimo.`);
+      showToast(`O lance deve ser maior que o valor mínimo de R$ ${listing.price.toLocaleString("pt-BR")}.`, "error");
       return;
     }
 
-    const confirmBid = window.confirm(
-      `Deseja registrar o lance de R$ ${bidNum.toLocaleString("pt-BR")} no jogador ${listing.players.name}?`
-    );
+    setConfirmModal({
+      title: "Dar Lance",
+      message: `Deseja registrar o lance de R$ ${bidNum.toLocaleString("pt-BR")} no jogador ${listing.players.name}?`,
+      onConfirm: async () => {
+        setActionLoading(listing.id);
+        try {
+          const { data, error } = await supabase.rpc("place_auction_bid", {
+            p_listing_id: listing.id,
+            p_bidder_team_id: myTeam.id,
+            p_amount: bidNum,
+          });
 
-    if (!confirmBid) return;
+          if (error) throw error;
 
-    setActionLoading(listing.id);
+          if (data && data.success) {
+            showToast(data.message, "success");
+            // Recarregar
+            const { data: updatedListings } = await supabase
+              .from("market_listings")
+              .select("*, players(*), teams(name)")
+              .eq("status", "active")
+              .order("created_at", { ascending: false });
 
-    try {
-      const { data, error } = await supabase.rpc("place_auction_bid", {
-        p_listing_id: listing.id,
-        p_bidder_team_id: myTeam.id,
-        p_amount: bidNum,
-      });
-
-      if (error) throw error;
-
-      if (data && data.success) {
-        alert(data.message);
-        // Recarregar
-        const { data: updatedListings } = await supabase
-          .from("market_listings")
-          .select("*, players(*), teams(name)")
-          .eq("status", "active")
-          .order("created_at", { ascending: false });
-
-        setMarketListings(updatedListings || []);
-        setBidAmounts((prev) => ({ ...prev, [listing.id]: "" }));
-      } else {
-        alert(data.message || "Erro ao lançar.");
+            setMarketListings(updatedListings || []);
+            setBidAmounts((prev) => ({ ...prev, [listing.id]: "" }));
+          } else {
+            showToast(data.message || "Erro ao lançar.", "error");
+          }
+        } catch (err) {
+          showToast("Erro ao registrar lance: " + err.message, "error");
+        } finally {
+          setActionLoading(null);
+        }
       }
-    } catch (err) {
-      alert("Erro ao registrar lance: " + err.message);
-    } finally {
-      setActionLoading(null);
-    }
+    });
   };
 
   // Cancelar anúncio
   const handleCancelListing = async (listing) => {
-    const confirmCancel = window.confirm(
-      `Deseja cancelar o anúncio de ${listing.players.name}? Ele retornará ao seu time.`
-    );
+    setConfirmModal({
+      title: "Cancelar Anúncio",
+      message: `Deseja cancelar o anúncio de ${listing.players.name}? Ele retornará ao seu time.`,
+      onConfirm: async () => {
+        setActionLoading(listing.id);
+        try {
+          const { error: listErr } = await supabase
+            .from("market_listings")
+            .update({ status: "cancelled" })
+            .eq("id", listing.id);
 
-    if (!confirmCancel) return;
+          if (listErr) throw listErr;
 
-    setActionLoading(listing.id);
+          const { error: playerErr } = await supabase
+            .from("players")
+            .update({ team_id: listing.seller_team_id })
+            .eq("id", listing.player_id);
 
-    try {
-      const { error: listErr } = await supabase
-        .from("market_listings")
-        .update({ status: "cancelled" })
-        .eq("id", listing.id);
+          if (playerErr) throw playerErr;
 
-      if (listErr) throw listErr;
-
-      const { error: playerErr } = await supabase
-        .from("players")
-        .update({ team_id: listing.seller_team_id })
-        .eq("id", listing.player_id);
-
-      if (playerErr) throw playerErr;
-
-      alert("Anúncio cancelado!");
-      setMarketListings((prev) => prev.filter((item) => item.id !== listing.id));
-    } catch (err) {
-      alert("Erro ao cancelar: " + err.message);
-    } finally {
-      setActionLoading(null);
-    }
+          showToast("Anúncio cancelado com sucesso!", "success");
+          setMarketListings((prev) => prev.filter((item) => item.id !== listing.id));
+        } catch (err) {
+          showToast("Erro ao cancelar: " + err.message, "error");
+        } finally {
+          setActionLoading(null);
+        }
+      }
+    });
   };
 
   // Enviar proposta de troca direta (Trade)
@@ -494,7 +531,7 @@ export default function Market() {
     if (!myTeam || !selectedTargetTeamId) return;
 
     if (tradeSendPlayers.length === 0 && tradeReceivePlayers.length === 0) {
-      alert("Por favor, selecione pelo menos um jogador envolvido na troca.");
+      showToast("Por favor, selecione pelo menos um jogador envolvido na troca.", "error");
       return;
     }
 
@@ -502,212 +539,217 @@ export default function Market() {
     const requestMoneyNum = parseFloat(tradeRequestMoney) || 0;
 
     if (offerMoneyNum < 0 || requestMoneyNum < 0) {
-      alert("Valores monetários não podem ser negativos.");
+      showToast("Valores monetários não podem ser negativos.", "error");
       return;
     }
 
     if (offerMoneyNum > myTeam.budget) {
-      alert("Você não possui saldo para cobrir o valor em dinheiro oferecido.");
+      showToast("Você não possui saldo para cobrir o valor em dinheiro oferecido.", "error");
       return;
     }
 
-    const confirmTrade = window.confirm("Deseja enviar esta proposta de troca?");
-    if (!confirmTrade) return;
+    setConfirmModal({
+      title: "Enviar Proposta de Troca",
+      message: "Deseja enviar esta proposta de troca?",
+      onConfirm: async () => {
+        setTradeSubmitting(true);
+        try {
+          const expiresAt = new Date();
+          expiresAt.setHours(expiresAt.getHours() + 48); // Expiração em 48h
 
-    setTradeSubmitting(true);
+          // 1. Criar proposta de troca
+          const { data: tradeOffer, error: tradeErr } = await supabase
+            .from("trade_offers")
+            .insert([
+              {
+                sender_team_id: myTeam.id,
+                receiver_team_id: selectedTargetTeamId,
+                offered_money: offerMoneyNum,
+                requested_money: requestMoneyNum,
+                status: "pending",
+                expires_at: expiresAt.toISOString(),
+              },
+            ])
+            .select()
+            .single();
 
-    try {
-      const expiresAt = new Date();
-      expiresAt.setHours(expiresAt.getHours() + 48); // Expiração em 48h
+          if (tradeErr) throw tradeErr;
 
-      // 1. Criar proposta de troca
-      const { data: tradeOffer, error: tradeErr } = await supabase
-        .from("trade_offers")
-        .insert([
-          {
-            sender_team_id: myTeam.id,
-            receiver_team_id: selectedTargetTeamId,
-            offered_money: offerMoneyNum,
-            requested_money: requestMoneyNum,
-            status: "pending",
-            expires_at: expiresAt.toISOString(),
-          },
-        ])
-        .select()
-        .single();
+          // 2. Associar jogadores à proposta
+          const tradePlayers = [];
 
-      if (tradeErr) throw tradeErr;
+          tradeSendPlayers.forEach((pid) => {
+            tradePlayers.push({
+              trade_offer_id: tradeOffer.id,
+              player_id: pid,
+              direction: "send",
+            });
+          });
 
-      // 2. Associar jogadores à proposta
-      const tradePlayers = [];
+          tradeReceivePlayers.forEach((pid) => {
+            tradePlayers.push({
+              trade_offer_id: tradeOffer.id,
+              player_id: pid,
+              direction: "receive",
+            });
+          });
 
-      tradeSendPlayers.forEach((pid) => {
-        tradePlayers.push({
-          trade_offer_id: tradeOffer.id,
-          player_id: pid,
-          direction: "send",
-        });
-      });
+          const { error: playersErr } = await supabase
+            .from("trade_players")
+            .insert(tradePlayers);
 
-      tradeReceivePlayers.forEach((pid) => {
-        tradePlayers.push({
-          trade_offer_id: tradeOffer.id,
-          player_id: pid,
-          direction: "receive",
-        });
-      });
+          if (playersErr) throw playersErr;
 
-      const { error: playersErr } = await supabase
-        .from("trade_players")
-        .insert(tradePlayers);
+          // Inserir notificação para o time recebedor
+          const targetTeamObj = otherTeams.find(t => t.id === selectedTargetTeamId);
+          if (targetTeamObj?.user_id) {
+            await supabase.from("notifications").insert({
+              user_id: targetTeamObj.user_id,
+              title: "Nova Proposta de Troca 🔄",
+              content: `Você recebeu uma nova proposta de troca de jogadores do clube ${myTeam.name}.`
+            });
+          }
 
-      if (playersErr) throw playersErr;
-
-      // Inserir notificação para o time recebedor
-      const targetTeamObj = otherTeams.find(t => t.id === selectedTargetTeamId);
-      if (targetTeamObj?.user_id) {
-        await supabase.from("notifications").insert({
-          user_id: targetTeamObj.user_id,
-          title: "Nova Proposta de Troca 🔄",
-          content: `Você recebeu uma nova proposta de troca de jogadores do clube ${myTeam.name}.`
-        });
+          showToast("Proposta de troca enviada com sucesso!", "success");
+          
+          // Limpar campos
+          setTradeSendPlayers([]);
+          setTradeReceivePlayers([]);
+          setTradeOfferMoney("0");
+          setTradeRequestMoney("0");
+          setProposingTrade(false);
+          setSelectedTargetTeamId("");
+          setTargetSquad([]);
+          
+          // Recarregar trocas
+          await loadTradesData(myTeam.id);
+        } catch (err) {
+          showToast("Erro ao propor troca: " + err.message, "error");
+        } finally {
+          setTradeSubmitting(false);
+        }
       }
-
-      alert("Proposta de troca enviada com sucesso!");
-      
-      // Limpar campos
-      setTradeSendPlayers([]);
-      setTradeReceivePlayers([]);
-      setTradeOfferMoney("0");
-      setTradeRequestMoney("0");
-      setProposingTrade(false);
-      setSelectedTargetTeamId("");
-      setTargetSquad([]);
-      
-      // Recarregar trocas
-      await loadTradesData(myTeam.id);
-    } catch (err) {
-      alert("Erro ao propor troca: " + err.message);
-    } finally {
-      setTradeSubmitting(false);
-    }
+    });
   };
 
   // Aceitar Proposta de Troca
   const handleAcceptTrade = async (tradeId) => {
-    const confirmAccept = window.confirm(
-      "Deseja aceitar esta proposta de troca? Os jogadores envolvidos serão transferidos de time e os caixas serão atualizados."
-    );
-
-    if (!confirmAccept) return;
-
-    setActionLoading(tradeId);
-
-    try {
-      const { data, error } = await supabase.rpc("accept_trade_offer", {
-        p_trade_id: tradeId,
-      });
-
-      if (error) throw error;
-
-      if (data && data.success) {
-        alert(data.message);
-        
-        // Notificar o proponente (sender) de que a troca foi aceita
-        const trade = receivedTrades.find(t => t.id === tradeId);
-        if (trade?.sender_team?.user_id) {
-          await supabase.from("notifications").insert({
-            user_id: trade.sender_team.user_id,
-            title: "Proposta de Troca Aceita 🤝",
-            content: `O time ${myTeam.name} aceitou a proposta de troca enviada por você!`
+    setConfirmModal({
+      title: "Aceitar Proposta de Troca",
+      message: "Deseja aceitar esta proposta de troca? Os jogadores envolvidos serão transferidos de time e os caixas serão atualizados.",
+      onConfirm: async () => {
+        setActionLoading(tradeId);
+        try {
+          const { data, error } = await supabase.rpc("accept_trade_offer", {
+            p_trade_id: tradeId,
           });
+
+          if (error) throw error;
+
+          if (data && data.success) {
+            showToast(data.message, "success");
+            
+            // Notificar o proponente (sender) de que a troca foi aceita
+            const trade = receivedTrades.find(t => t.id === tradeId);
+            if (trade?.sender_team?.user_id) {
+              await supabase.from("notifications").insert({
+                user_id: trade.sender_team.user_id,
+                title: "Proposta de Troca Aceita 🤝",
+                content: `O time ${myTeam.name} aceitou a proposta de troca enviada por você!`
+              });
+            }
+
+            // Recarregar dados de trocas e meu time
+            const { data: teamData } = await supabase
+              .from("teams")
+              .select("*")
+              .eq("id", myTeam.id)
+              .single();
+            setMyTeam(teamData);
+
+            await loadTradesData(myTeam.id);
+          } else {
+            showToast(data.message || "Erro desconhecido ao aceitar a troca.", "error");
+          }
+        } catch (err) {
+          showToast("Erro ao finalizar troca: " + err.message, "error");
+        } finally {
+          setActionLoading(null);
         }
-
-        // Recarregar dados de trocas e meu time
-        const { data: teamData } = await supabase
-          .from("teams")
-          .select("*")
-          .eq("id", myTeam.id)
-          .single();
-        setMyTeam(teamData);
-
-        await loadTradesData(myTeam.id);
-      } else {
-        alert(data.message || "Erro desconhecido ao aceitar a troca.");
       }
-    } catch (err) {
-      alert("Erro ao finalizar troca: " + err.message);
-    } finally {
-      setActionLoading(null);
-    }
+    });
   };
 
   // Rejeitar Proposta de Troca
   const handleRejectTrade = async (tradeId) => {
-    const confirmReject = window.confirm("Deseja recusar esta proposta de troca?");
-    if (!confirmReject) return;
+    setConfirmModal({
+      title: "Recusar Proposta de Troca",
+      message: "Deseja recusar esta proposta de troca?",
+      onConfirm: async () => {
+        setActionLoading(tradeId);
+        try {
+          const { error } = await supabase
+            .from("trade_offers")
+            .update({ status: "rejected" })
+            .eq("id", tradeId);
 
-    setActionLoading(tradeId);
+          if (error) throw error;
 
-    try {
-      const { error } = await supabase
-        .from("trade_offers")
-        .update({ status: "rejected" })
-        .eq("id", tradeId);
+          // Notificar o proponente (sender) de que a troca foi recusada
+          const trade = receivedTrades.find(t => t.id === tradeId);
+          if (trade?.sender_team?.user_id) {
+            await supabase.from("notifications").insert({
+              user_id: trade.sender_team.user_id,
+              title: "Proposta de Troca Recusada ❌",
+              content: `O time ${myTeam.name} recusou a proposta de troca de jogadores.`
+            });
+          }
 
-      if (error) throw error;
-
-      // Notificar o proponente (sender) de que a troca foi recusada
-      const trade = receivedTrades.find(t => t.id === tradeId);
-      if (trade?.sender_team?.user_id) {
-        await supabase.from("notifications").insert({
-          user_id: trade.sender_team.user_id,
-          title: "Proposta de Troca Recusada ❌",
-          content: `O time ${myTeam.name} recusou a proposta de troca de jogadores.`
-        });
+          showToast("Proposta recusada com sucesso!", "success");
+          await loadTradesData(myTeam.id);
+        } catch (err) {
+          showToast("Erro ao recusar: " + err.message, "error");
+        } finally {
+          setActionLoading(null);
+        }
       }
-
-      alert("Proposta recusada!");
-      await loadTradesData(myTeam.id);
-    } catch (err) {
-      alert("Erro ao recusar: " + err.message);
-    } finally {
-      setActionLoading(null);
-    }
+    });
   };
 
   // Cancelar Proposta de Troca Enviada
   const handleCancelTrade = async (tradeId) => {
-    const confirmCancel = window.confirm("Deseja cancelar esta proposta enviada?");
-    if (!confirmCancel) return;
+    setConfirmModal({
+      title: "Cancelar Proposta de Troca",
+      message: "Deseja cancelar esta proposta enviada?",
+      onConfirm: async () => {
+        setActionLoading(tradeId);
+        try {
+          const { error } = await supabase
+            .from("trade_offers")
+            .update({ status: "cancelled" })
+            .eq("id", tradeId);
 
-    setActionLoading(tradeId);
+          if (error) throw error;
 
-    try {
-      const { error } = await supabase
-        .from("trade_offers")
-        .update({ status: "cancelled" })
-        .eq("id", tradeId);
+          // Notificar o destinatário (receiver) de que a troca foi cancelada pelo remetente
+          const trade = sentTrades.find(t => t.id === tradeId);
+          if (trade?.receiver_team?.user_id) {
+            await supabase.from("notifications").insert({
+              user_id: trade.receiver_team.user_id,
+              title: "Proposta de Troca Cancelada ⚠️",
+              content: `O time ${myTeam.name} cancelou a proposta de troca enviada anteriormente.`
+            });
+          }
 
-      if (error) throw error;
-
-      // Notificar o destinatário (receiver) de que a troca foi cancelada pelo remetente
-      const trade = sentTrades.find(t => t.id === tradeId);
-      if (trade?.receiver_team?.user_id) {
-        await supabase.from("notifications").insert({
-          user_id: trade.receiver_team.user_id,
-          title: "Proposta de Troca Cancelada ⚠️",
-          content: `O time ${myTeam.name} cancelou a proposta de troca enviada anteriormente.`
-        });
+          showToast("Proposta de troca cancelada com sucesso!", "success");
+          await loadTradesData(myTeam.id);
+        } catch (err) {
+          showToast("Erro ao cancelar: " + err.message, "error");
+        } finally {
+          setActionLoading(null);
+        }
       }
-
-      alert("Proposta de troca cancelada!");
-      await loadTradesData(myTeam.id);
-    } catch (err) {
-      alert("Erro ao cancelar: " + err.message);
-    } finally {
-      setActionLoading(null);
-    }
+    });
   };
 
   // Alterna checkboxes para envio de jogadores na troca
@@ -956,8 +998,9 @@ export default function Market() {
                   {/* Tipo de Anúncio */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-300 mb-2">
-                        Tipo de Anúncio:
+                      <label className="block text-sm font-semibold text-gray-300 mb-2 flex items-center">
+                        <span>Tipo de Anúncio:</span>
+                        <Tooltip content="Compra Imediata permite que outro time compre na hora pelo valor fixado. Leilão permite lances e encerra após a duração definida." />
                       </label>
                       <select
                         value={listingType}
@@ -971,8 +1014,9 @@ export default function Market() {
 
                     {/* Preço */}
                     <div>
-                      <label className="block text-sm font-semibold text-gray-300 mb-2">
-                        {listingType === "auction" ? "Preço Inicial (Lance Mín.)" : "Preço de Compra:"}
+                      <label className="block text-sm font-semibold text-gray-300 mb-2 flex items-center">
+                        <span>{listingType === "auction" ? "Preço Inicial (Lance Mín.)" : "Preço de Compra:"}</span>
+                        <Tooltip content="O valor financeiro de venda. No leilão, representa o valor do primeiro lance mínimo aceitável." />
                       </label>
                       <input
                         type="number"
@@ -990,8 +1034,9 @@ export default function Market() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* Duração */}
                       <div>
-                        <label className="block text-sm font-semibold text-gray-300 mb-2">
-                          Duração do Leilão:
+                        <label className="block text-sm font-semibold text-gray-300 mb-2 flex items-center">
+                          <span>Duração do Leilão:</span>
+                          <Tooltip content="O tempo total que o leilão permanecerá ativo recebendo lances antes de encerrar." />
                         </label>
                         <select
                           value={durationHours}
@@ -1007,8 +1052,9 @@ export default function Market() {
 
                       {/* Buyout Price */}
                       <div>
-                        <label className="block text-sm font-semibold text-gray-300 mb-2">
-                          Preço de Arremate (Buyout - Opcional):
+                        <label className="block text-sm font-semibold text-gray-300 mb-2 flex items-center">
+                          <span>Preço de Arremate (Buyout - Opcional):</span>
+                          <Tooltip content="Um valor limite que, se pago por outro competidor, arremata e encerra o leilão imediatamente." />
                         </label>
                         <input
                           type="number"
@@ -1555,6 +1601,7 @@ export default function Market() {
       )}
 
       {/* Painel/Modal do Chat de Negociação (Fase 2) */}
+      {/* Painel/Modal do Chat de Negociação (Fase 2) */}
       {activeChat && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="glass-panel w-full max-w-lg h-[500px] flex flex-col justify-between p-6 rounded-2xl border border-white/10 bg-[#090d16]/95 shadow-2xl relative text-left">
@@ -1621,6 +1668,68 @@ export default function Market() {
                 Enviar
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Toast flutuante */}
+      {toast && (
+        <div className={`fixed bottom-5 right-5 z-[9999] max-w-sm rounded-xl border bg-[#090d16]/90 backdrop-blur-md p-4 shadow-2xl animate-slideIn flex gap-3 items-start border-l-4 ${
+          toast.type === "success" ? "border-l-[#10b981] border-emerald-500/20" :
+          toast.type === "error" ? "border-l-red-500 border-red-500/20" :
+          "border-l-blue-500 border-blue-500/20"
+        }`}>
+          <div className="text-base flex-shrink-0 pt-0.5">
+            {toast.type === "success" ? "✅" : toast.type === "error" ? "❌" : "ℹ️"}
+          </div>
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <p className="text-xs font-bold text-white leading-tight">
+              {toast.type === "success" ? "Sucesso" : toast.type === "error" ? "Erro" : "Informação"}
+            </p>
+            <p className="text-[10.5px] text-gray-400 leading-relaxed whitespace-pre-line">{toast.message}</p>
+          </div>
+          <button
+            onClick={() => setToast(null)}
+            className="text-gray-500 hover:text-gray-300 text-xs font-bold px-1 transition-colors"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {/* ConfirmModal customizado */}
+      {confirmModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="glass-panel w-full max-w-md p-6 rounded-2xl border border-white/10 bg-[#090d16]/95 shadow-2xl relative text-left">
+            <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+              <span>❓</span> {confirmModal.title}
+            </h3>
+            <p className="text-xs text-gray-300 mb-6 whitespace-pre-line leading-relaxed">
+              {confirmModal.message}
+            </p>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  confirmModal.onConfirm();
+                  setConfirmModal(null);
+                }}
+                className="w-2/3 rounded-xl bg-gradient-to-r from-[#10b981] to-[#3b82f6] hover:from-[#059669] hover:to-blue-600 py-3 text-xs font-bold text-white shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
+                Confirmar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirmModal.onCancel) confirmModal.onCancel();
+                  setConfirmModal(null);
+                }}
+                className="w-1/3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 py-3 text-xs font-bold text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}

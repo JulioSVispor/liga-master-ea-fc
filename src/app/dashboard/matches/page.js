@@ -3,12 +3,46 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
+// ─── Tooltip ℹ️ ─────────────────────────────────
+function Tooltip({ content }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <span 
+      className="relative inline-block ml-1 cursor-pointer group text-gray-500 hover:text-white select-none z-10"
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+    >
+      ℹ️
+      {visible && (
+        <span className="absolute z-[100] w-64 p-3 text-[10px] font-normal text-gray-200 bg-[#0c101d] border border-white/10 rounded-xl shadow-2xl top-6 left-1/2 -translate-x-1/2 leading-relaxed transition-opacity animate-fadeIn normal-case whitespace-normal">
+          {content}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export default function MatchesPage() {
   const [userProfile, setUserProfile] = useState(null);
   const [myTeam, setMyTeam] = useState(null);
   const [activeTab, setActiveTab] = useState("next"); // "next", "handshake", "history"
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Estados para Toasts & Confirmações customizadas (Glassmorphism dark theme)
+  const [toast, setToast] = useState(null); // { message: string, type: "success" | "error" | "info" }
+  const [confirmModal, setConfirmModal] = useState(null); // { title: string, message: string, onConfirm: () => void, onCancel?: () => void }
+
+  const showToast = (message, type = "success") => {
+    setToast({ message, type });
+  };
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   // Estados do Form de Reporte
   const [reportingMatch, setReportingMatch] = useState(null);
@@ -465,7 +499,7 @@ export default function MatchesPage() {
   const handleSubmitReport = async (e) => {
     e.preventDefault();
     if (homeScore === "" || awayScore === "") {
-      triggerAlert("error", "Favor preencher os gols de ambos os times.");
+      showToast("Favor preencher os gols de ambos os times.", "error");
       return;
     }
 
@@ -527,44 +561,47 @@ export default function MatchesPage() {
         });
       }
 
-      triggerAlert("success", "Placar reportado! Aguardando confirmação do adversário.");
+      showToast("Placar reportado! Aguardando confirmação do adversário.", "success");
       setReportingMatch(null);
       loadData();
     } catch (err) {
-      triggerAlert("error", "Erro ao reportar placar: " + err.message);
+      showToast("Erro ao reportar placar: " + err.message, "error");
     }
   };
 
   // Confirmar Partida (Handshake)
   const handleConfirmMatch = async (matchId) => {
-    const confirm = window.confirm("Deseja confirmar este resultado? Isso atualizará a classificação oficial da liga.");
-    if (!confirm) return;
+    setConfirmModal({
+      title: "Confirmar Placar",
+      message: "Deseja confirmar este resultado? Isso atualizará a classificação oficial da liga.",
+      onConfirm: async () => {
+        const matchObj = matches.find(m => m.id === matchId);
 
-    const matchObj = matches.find(m => m.id === matchId);
+        const { data, error } = await supabase.rpc("confirm_match", { p_match_id: matchId });
 
-    const { data, error } = await supabase.rpc("confirm_match", { p_match_id: matchId });
-
-    if (error || (data && !data.success)) {
-      triggerAlert("error", "Erro ao confirmar partida: " + (error?.message || data?.message));
-    } else {
-      // Notificar o outro usuário que reportou
-      if (matchObj && matchObj.reported_by) {
-        await supabase.from("notifications").insert({
-          user_id: matchObj.reported_by,
-          title: "Resultado de Confronto Confirmado ✅",
-          content: `O time ${myTeam.name} confirmou o resultado do jogo da Rodada ${matchObj.round_number}. A partida foi homologada.`
-        });
+        if (error || (data && !data.success)) {
+          showToast("Erro ao confirmar partida: " + (error?.message || data?.message), "error");
+        } else {
+          // Notificar o outro usuário que reportou
+          if (matchObj && matchObj.reported_by) {
+            await supabase.from("notifications").insert({
+              user_id: matchObj.reported_by,
+              title: "Resultado de Confronto Confirmado ✅",
+              content: `O time ${myTeam.name} confirmou o resultado do jogo da Rodada ${matchObj.round_number}. A partida foi homologada.`
+            });
+          }
+          showToast("Partida homologada com sucesso!", "success");
+          loadData();
+        }
       }
-      triggerAlert("success", "Partida homologada com sucesso!");
-      loadData();
-    }
+    });
   };
 
   // Contestar Partida (Disputa)
   const handleDisputeMatch = async (e) => {
     e.preventDefault();
     if (!disputeReason.trim()) {
-      triggerAlert("error", "Por favor, explique o motivo da contestação.");
+      showToast("Por favor, explique o motivo da contestação.", "error");
       return;
     }
 
@@ -576,7 +613,7 @@ export default function MatchesPage() {
     });
 
     if (error || (data && !data.success)) {
-      triggerAlert("error", "Erro ao abrir disputa: " + (error?.message || data?.message));
+      showToast("Erro ao abrir disputa: " + (error?.message || data?.message), "error");
     } else {
       // Notificar o outro usuário de que o placar foi contestado
       if (disputingMatch.reported_by) {
@@ -586,7 +623,7 @@ export default function MatchesPage() {
           content: `O time ${myTeam.name} contestou o resultado reportado da Rodada ${disputingMatch.round_number}. O jogo foi para arbitragem.`
         });
       }
-      triggerAlert("success", "Disputa registrada. O administrador irá analisar as provas.");
+      showToast("Disputa registrada. O administrador irá analisar as provas.", "success");
       setDisputingMatch(null);
       setDisputeReason("");
       setDisputeProofUrl("");
@@ -619,54 +656,43 @@ export default function MatchesPage() {
         <p className="text-gray-400 text-sm mt-1">Reporte seus resultados, confirme placares e acompanhe seu histórico.</p>
       </div>
 
-      {/* Alertas */}
-      {alert && (
-        <div
-          className={`p-4 rounded-xl text-sm border flex items-center gap-3 ${
-            alert.type === "success"
-              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-              : "bg-red-500/10 text-red-400 border-red-500/20"
-          }`}
-        >
-          <span>{alert.type === "success" ? "✅" : "⚠️"}</span>
-          <span>{alert.message}</span>
-        </div>
-      )}
-
       {/* Tabs */}
       <div className="flex border-b border-white/5 gap-2">
         <button
           onClick={() => setActiveTab("next")}
-          className={`px-4 py-3 text-xs uppercase font-bold tracking-wider border-b-2 transition-all ${
+          className={`px-4 py-3 text-xs uppercase font-bold tracking-wider border-b-2 transition-all flex items-center gap-1.5 ${
             activeTab === "next"
               ? "border-[#10b981] text-[#10b981]"
               : "border-transparent text-gray-400 hover:text-white"
           }`}
         >
-          ⚽ Próximos Jogos
+          <span>⚽ Próximos Jogos</span>
+          <Tooltip content="Partidas agendadas que ainda precisam ter o placar reportado por um dos treinadores." />
         </button>
         <button
           onClick={() => setActiveTab("handshake")}
-          className={`px-4 py-3 text-xs uppercase font-bold tracking-wider border-b-2 transition-all flex items-center gap-2 ${
+          className={`px-4 py-3 text-xs uppercase font-bold tracking-wider border-b-2 transition-all flex items-center gap-1.5 ${
             activeTab === "handshake"
               ? "border-[#10b981] text-[#10b981]"
               : "border-transparent text-gray-400 hover:text-white"
           }`}
         >
-          🤝 Validação (Handshake)
+          <span>🤝 Validação (Handshake)</span>
           {matches.filter(m => m.status === "pending" && m.reported_by && m.reported_by !== userProfile?.id).length > 0 && (
             <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping"></span>
           )}
+          <Tooltip content="Partidas já reportadas aguardando confirmação ou contestação do adversário." />
         </button>
         <button
           onClick={() => setActiveTab("history")}
-          className={`px-4 py-3 text-xs uppercase font-bold tracking-wider border-b-2 transition-all ${
+          className={`px-4 py-3 text-xs uppercase font-bold tracking-wider border-b-2 transition-all flex items-center gap-1.5 ${
             activeTab === "history"
               ? "border-[#10b981] text-[#10b981]"
               : "border-transparent text-gray-400 hover:text-white"
           }`}
         >
-          📜 Histórico
+          <span>📜 Histórico</span>
+          <Tooltip content="Partidas homologadas e em disputa (sob arbitragem)." />
         </button>
         <button
           onClick={() => {
@@ -674,13 +700,14 @@ export default function MatchesPage() {
             setSelectedOpponentId("");
             setH2hMatches([]);
           }}
-          className={`px-4 py-3 text-xs uppercase font-bold tracking-wider border-b-2 transition-all ${
+          className={`px-4 py-3 text-xs uppercase font-bold tracking-wider border-b-2 transition-all flex items-center gap-1.5 ${
             activeTab === "classicos"
               ? "border-[#10b981] text-[#10b981]"
               : "border-transparent text-gray-400 hover:text-white"
           }`}
         >
-          ⚔️ Retrospecto
+          <span>⚔️ Retrospecto</span>
+          <Tooltip content="Estatísticas H2H e histórico detalhado contra outros clubes." />
         </button>
       </div>
 
@@ -985,7 +1012,10 @@ export default function MatchesPage() {
               {/* Ficha Técnica / Eventos */}
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Acontecimentos do Jogo</span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center">
+                    <span>Acontecimentos do Jogo</span>
+                    <Tooltip content="Gols, assistências e cartões da partida. Os dados inseridos alimentam os rankings individuais da liga e controlam suspensões automáticas." />
+                  </span>
                   <button
                     type="button"
                     onClick={addEvent}
@@ -1080,7 +1110,10 @@ export default function MatchesPage() {
 
               {/* Votação de Melhor em Campo (MOTM) */}
               <div className="space-y-2 bg-[#0d1527]/30 p-4 rounded-xl border border-white/5">
-                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400">⭐ Melhor Jogador em Campo (MOTM)</label>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center">
+                  <span>⭐ Melhor Jogador em Campo (MOTM)</span>
+                  <Tooltip content="Voto no destaque da partida para o ranking acumulativo de Craque do Campeonato (Man of the Match)." />
+                </label>
                 <select
                   value={motmPlayerId}
                   onChange={(e) => setMotmPlayerId(e.target.value)}
@@ -1350,6 +1383,67 @@ export default function MatchesPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {/* Toast flutuante */}
+      {toast && (
+        <div className={`fixed bottom-5 right-5 z-[9999] max-w-sm rounded-xl border bg-[#090d16]/90 backdrop-blur-md p-4 shadow-2xl animate-slideIn flex gap-3 items-start border-l-4 ${
+          toast.type === "success" ? "border-l-[#10b981] border-emerald-500/20" :
+          toast.type === "error" ? "border-l-red-500 border-red-500/20" :
+          "border-l-blue-500 border-blue-500/20"
+        }`}>
+          <div className="text-base flex-shrink-0 pt-0.5">
+            {toast.type === "success" ? "✅" : toast.type === "error" ? "❌" : "ℹ️"}
+          </div>
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <p className="text-xs font-bold text-white leading-tight">
+              {toast.type === "success" ? "Sucesso" : toast.type === "error" ? "Erro" : "Informação"}
+            </p>
+            <p className="text-[10.5px] text-gray-400 leading-relaxed whitespace-pre-line">{toast.message}</p>
+          </div>
+          <button
+            onClick={() => setToast(null)}
+            className="text-gray-500 hover:text-gray-300 text-xs font-bold px-1 transition-colors"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {/* ConfirmModal customizado */}
+      {confirmModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="glass-panel w-full max-w-md p-6 rounded-2xl border border-white/10 bg-[#090d16]/95 shadow-2xl relative text-left">
+            <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+              <span>❓</span> {confirmModal.title}
+            </h3>
+            <p className="text-xs text-gray-300 mb-6 whitespace-pre-line leading-relaxed">
+              {confirmModal.message}
+            </p>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  confirmModal.onConfirm();
+                  setConfirmModal(null);
+                }}
+                className="w-2/3 rounded-xl bg-gradient-to-r from-[#10b981] to-[#3b82f6] hover:from-[#059669] hover:to-blue-600 py-3 text-xs font-bold text-white shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
+                Confirmar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirmModal.onCancel) confirmModal.onCancel();
+                  setConfirmModal(null);
+                }}
+                className="w-1/3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 py-3 text-xs font-bold text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}

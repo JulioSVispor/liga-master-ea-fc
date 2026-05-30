@@ -107,7 +107,7 @@ export default function Market() {
       // 2. Trocas recebidas pendentes
       const { data: received } = await supabase
         .from("trade_offers")
-        .select("*, sender_team:teams!sender_team_id(name), trade_players(*, players(*))")
+        .select("*, sender_team:teams!sender_team_id(name, user_id), trade_players(*, players(*))")
         .eq("receiver_team_id", myTeamId)
         .eq("status", "pending")
         .order("created_at", { ascending: false });
@@ -116,7 +116,7 @@ export default function Market() {
       // 3. Trocas enviadas pendentes
       const { data: sent } = await supabase
         .from("trade_offers")
-        .select("*, receiver_team:teams!receiver_team_id(name), trade_players(*, players(*))")
+        .select("*, receiver_team:teams!receiver_team_id(name, user_id), trade_players(*, players(*))")
         .eq("sender_team_id", myTeamId)
         .order("created_at", { ascending: false });
       setSentTrades(sent || []);
@@ -124,7 +124,7 @@ export default function Market() {
       // 4. Empréstimos recebidos pendentes
       const { data: recLoans } = await supabase
         .from("loan_offers")
-        .select("*, sender_team:teams!sender_team_id(name), players(*)")
+        .select("*, sender_team:teams!sender_team_id(name, user_id), players(*)")
         .eq("receiver_team_id", myTeamId)
         .eq("status", "pending")
         .order("created_at", { ascending: false });
@@ -133,7 +133,7 @@ export default function Market() {
       // 5. Empréstimos enviados pendentes/gerais
       const { data: sLoans } = await supabase
         .from("loan_offers")
-        .select("*, receiver_team:teams!receiver_team_id(name), players(*)")
+        .select("*, receiver_team:teams!receiver_team_id(name, user_id), players(*)")
         .eq("sender_team_id", myTeamId)
         .order("created_at", { ascending: false });
       setSentLoans(sLoans || []);
@@ -563,6 +563,16 @@ export default function Market() {
 
       if (playersErr) throw playersErr;
 
+      // Inserir notificação para o time recebedor
+      const targetTeamObj = otherTeams.find(t => t.id === selectedTargetTeamId);
+      if (targetTeamObj?.user_id) {
+        await supabase.from("notifications").insert({
+          user_id: targetTeamObj.user_id,
+          title: "Nova Proposta de Troca 🔄",
+          content: `Você recebeu uma nova proposta de troca de jogadores do clube ${myTeam.name}.`
+        });
+      }
+
       alert("Proposta de troca enviada com sucesso!");
       
       // Limpar campos
@@ -602,6 +612,17 @@ export default function Market() {
 
       if (data && data.success) {
         alert(data.message);
+        
+        // Notificar o proponente (sender) de que a troca foi aceita
+        const trade = receivedTrades.find(t => t.id === tradeId);
+        if (trade?.sender_team?.user_id) {
+          await supabase.from("notifications").insert({
+            user_id: trade.sender_team.user_id,
+            title: "Proposta de Troca Aceita 🤝",
+            content: `O time ${myTeam.name} aceitou a proposta de troca enviada por você!`
+          });
+        }
+
         // Recarregar dados de trocas e meu time
         const { data: teamData } = await supabase
           .from("teams")
@@ -636,6 +657,16 @@ export default function Market() {
 
       if (error) throw error;
 
+      // Notificar o proponente (sender) de que a troca foi recusada
+      const trade = receivedTrades.find(t => t.id === tradeId);
+      if (trade?.sender_team?.user_id) {
+        await supabase.from("notifications").insert({
+          user_id: trade.sender_team.user_id,
+          title: "Proposta de Troca Recusada ❌",
+          content: `O time ${myTeam.name} recusou a proposta de troca de jogadores.`
+        });
+      }
+
       alert("Proposta recusada!");
       await loadTradesData(myTeam.id);
     } catch (err) {
@@ -659,6 +690,16 @@ export default function Market() {
         .eq("id", tradeId);
 
       if (error) throw error;
+
+      // Notificar o destinatário (receiver) de que a troca foi cancelada pelo remetente
+      const trade = sentTrades.find(t => t.id === tradeId);
+      if (trade?.receiver_team?.user_id) {
+        await supabase.from("notifications").insert({
+          user_id: trade.receiver_team.user_id,
+          title: "Proposta de Troca Cancelada ⚠️",
+          content: `O time ${myTeam.name} cancelou a proposta de troca enviada anteriormente.`
+        });
+      }
 
       alert("Proposta de troca cancelada!");
       await loadTradesData(myTeam.id);

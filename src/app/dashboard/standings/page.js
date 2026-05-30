@@ -9,11 +9,12 @@ export default function StandingsPage() {
   const [leagues, setLeagues] = useState([]);
   const [selectedLeague, setSelectedLeague] = useState(null);
   
-  const [activeTab, setActiveTab] = useState("table"); // "table", "scorers", "assists", "suspensions", "cups"
+  const [activeTab, setActiveTab] = useState("table"); // "table", "scorers", "assists", "motm", "suspensions", "cups"
   
   const [standings, setStandings] = useState([]);
   const [topScorers, setTopScorers] = useState([]);
   const [topAssists, setTopAssists] = useState([]);
+  const [topMotm, setTopMotm] = useState([]);
   const [suspensions, setSuspensions] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -197,7 +198,39 @@ export default function StandingsPage() {
         setTopAssists(sortedAssists);
       }
 
-      // 4. Suspensões Ativas
+      // 4. Melhor em Campo (MOTM) (Em partidas confirmadas nesta liga)
+      const { data: motmData, error: motmError } = await supabase
+        .from("matches")
+        .select(`
+          motm_player_id,
+          player:players!motm_player_id(name, common_name, rating, position, face_url, teams!team_id(name, real_club_name))
+        `)
+        .eq("league_id", leagueId)
+        .eq("status", "confirmed")
+        .not("motm_player_id", "is", null);
+
+      if (!motmError && motmData) {
+        const motmMap = {};
+        motmData.forEach(match => {
+          if (match.player) {
+            const pId = match.motm_player_id;
+            if (!motmMap[pId]) {
+              motmMap[pId] = {
+                player: match.player,
+                team: match.player.teams || null,
+                motm: 0
+              };
+            }
+            motmMap[pId].motm += 1;
+          }
+        });
+        const sortedMotm = Object.values(motmMap).sort((a, b) => b.motm - a.motm);
+        setTopMotm(sortedMotm);
+      } else {
+        setTopMotm([]);
+      }
+
+      // 5. Suspensões Ativas
       const { data: suspensionsData, error: suspError } = await supabase
         .from("suspensions")
         .select(`
@@ -296,6 +329,16 @@ export default function StandingsPage() {
           }`}
         >
           跑 Assistências
+        </button>
+        <button
+          onClick={() => setActiveTab("motm")}
+          className={`px-4 py-3 text-xs uppercase font-bold tracking-wider border-b-2 transition-all ${
+            activeTab === "motm"
+              ? "border-[#10b981] text-[#10b981]"
+              : "border-transparent text-gray-400 hover:text-white"
+          }`}
+        >
+          ⭐ Melhor em Campo
         </button>
         <button
           onClick={() => setActiveTab("suspensions")}
@@ -495,9 +538,57 @@ export default function StandingsPage() {
                     </tr>
                   )}
                 </tbody>
-              </table>
-            </div>
-          )}
+               </table>
+             </div>
+           )}
+
+           {/* TAB: Melhor em Campo (MOTM) */}
+           {activeTab === "motm" && (
+             <div className="overflow-x-auto">
+               <table className="w-full text-left text-sm text-gray-300">
+                 <thead className="text-[10px] font-bold uppercase text-gray-400 border-b border-white/5">
+                   <tr>
+                     <th className="py-3 px-2 text-center w-12">Pos</th>
+                     <th className="py-3 px-4">Jogador</th>
+                     <th className="py-3 px-4">Clube</th>
+                     <th className="py-3 px-4 text-center">Melhor em Campo</th>
+                   </tr>
+                 </thead>
+                 <tbody className="divide-y divide-white/5">
+                   {topMotm.map((item, index) => (
+                     <tr key={index} className="hover:bg-white/5 transition-colors">
+                       <td className="py-3 px-2 text-center font-bold text-gray-400">{index + 1}</td>
+                       <td className="py-3 px-4 font-semibold text-white">
+                         <div className="flex items-center gap-3">
+                           <div className="h-8 w-8 rounded-full bg-white/5 text-xs flex items-center justify-center font-bold border border-white/10 text-amber-400">
+                             ⭐
+                           </div>
+                           <div>
+                             <p className="text-sm font-bold text-white">{item.player?.name}</p>
+                             <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                               {item.player?.position} - Rating: {item.player?.rating}
+                             </p>
+                           </div>
+                         </div>
+                       </td>
+                       <td className="py-3 px-4 text-gray-400 text-sm">
+                         <p className="font-semibold text-gray-200">{item.team?.name || "Sem Clube"}</p>
+                         <p className="text-[10px] text-gray-500">{item.team?.real_club_name || "—"}</p>
+                       </td>
+                       <td className="py-3 px-4 text-center font-extrabold text-amber-400 text-lg">{item.motm}</td>
+                     </tr>
+                   ))}
+                   {topMotm.length === 0 && (
+                     <tr>
+                       <td colSpan="4" className="py-12 text-center text-gray-500 text-xs">
+                         Nenhum jogador eleito Melhor em Campo nesta liga ainda.
+                       </td>
+                     </tr>
+                   )}
+                 </tbody>
+               </table>
+             </div>
+           )}
 
           {/* TAB 4: Suspensões */}
           {activeTab === "suspensions" && (

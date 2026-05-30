@@ -12,6 +12,19 @@ export default function AdminUsersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
 
+  // Estados para modal de gerenciamento de elenco
+  const [squadModalOpen, setSquadModalOpen] = useState(false);
+  const [selectedTeamForSquad, setSelectedTeamForSquad] = useState(null);
+  const [squadPlayers, setSquadPlayers] = useState([]);
+  const [squadLoading, setSquadLoading] = useState(false);
+  const [allTeams, setAllTeams] = useState([]);
+  const [squadFilter, setSquadFilter] = useState("");
+  
+  // Estados para edição inline de jogador
+  const [editingPlayerId, setEditingPlayerId] = useState(null);
+  const [editPlayerWage, setEditPlayerWage] = useState("");
+  const [editPlayerValue, setEditPlayerValue] = useState("");
+
   // Carrega todos os usuários e seus times
   const loadUsers = async () => {
     setLoading(true);
@@ -36,6 +49,13 @@ export default function AdminUsersPage() {
 
       if (error) throw error;
       setUsers(data || []);
+
+      // Carregar todos os times cadastrados
+      const { data: allTeamsData } = await supabase
+        .from("teams")
+        .select("id, name, user_id")
+        .order("name", { ascending: true });
+      setAllTeams(allTeamsData || []);
     } catch (err) {
       console.error("Erro ao carregar usuários:", err);
       alert("Erro ao carregar lista de usuários: " + err.message);
@@ -142,6 +162,195 @@ export default function AdminUsersPage() {
       alert("Erro ao liberar elenco: " + err.message);
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  // Abrir modal de elenco e carregar jogadores
+  const openSquadModal = async (team) => {
+    setSelectedTeamForSquad(team);
+    setSquadModalOpen(true);
+    setSquadLoading(true);
+    setSquadFilter("");
+    setEditingPlayerId(null);
+    try {
+      const { data, error } = await supabase
+        .from("players")
+        .select("*")
+        .eq("team_id", team.id)
+        .order("rating", { ascending: false });
+
+      if (error) throw error;
+      setSquadPlayers(data || []);
+    } catch (err) {
+      console.error("Erro ao carregar elenco:", err);
+      alert("Erro ao carregar elenco: " + err.message);
+    } finally {
+      setSquadLoading(false);
+    }
+  };
+
+  // Recarregar o elenco atual
+  const refreshSquad = async (teamId) => {
+    setSquadLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("players")
+        .select("*")
+        .eq("team_id", teamId)
+        .order("rating", { ascending: false });
+
+      if (error) throw error;
+      setSquadPlayers(data || []);
+    } catch (err) {
+      console.error("Erro ao recarregar elenco:", err);
+    } finally {
+      setSquadLoading(false);
+    }
+  };
+
+  // Salvar edição direta de salário/passe do jogador
+  const handleSavePlayerEdit = async (player) => {
+    const wageVal = parseFloat(editPlayerWage);
+    const valueVal = parseFloat(editPlayerValue);
+
+    if (isNaN(wageVal) || isNaN(valueVal)) {
+      alert("Valores inválidos!");
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("players")
+        .update({
+          wage: wageVal,
+          value: valueVal
+        })
+        .eq("id", player.id);
+
+      if (error) throw error;
+
+      alert(`Jogador ${player.name} atualizado com sucesso!`);
+      setEditingPlayerId(null);
+      refreshSquad(player.team_id);
+    } catch (err) {
+      alert("Erro ao editar jogador: " + err.message);
+    }
+  };
+
+  // Iniciar edição do jogador
+  const startEditPlayer = (player) => {
+    setEditingPlayerId(player.id);
+    setEditPlayerWage(player.wage.toString());
+    setEditPlayerValue(player.value.toString());
+  };
+
+  // Transferir / Devolver jogador para outro time
+  const handleTransferPlayer = async (player, targetTeamId) => {
+    const targetTeam = allTeams.find(t => t.id === targetTeamId);
+    const targetTeamName = targetTeam ? targetTeam.name : "Agente Livre";
+    
+    const confirmMsg = targetTeamId 
+      ? `Deseja transferir o jogador ${player.name} para o time "${targetTeamName}"?`
+      : `Deseja devolver/liberar o jogador ${player.name} como Agente Livre?`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      const { error } = await supabase
+        .from("players")
+        .update({ team_id: targetTeamId || null })
+        .eq("id", player.id);
+
+      if (error) throw error;
+
+      // Registrar no histórico de transferências para transparência
+      await supabase
+        .from("transfer_history")
+        .insert({
+          player_id: player.id,
+          player_name: player.name,
+          player_position: player.position,
+          player_rating: player.rating,
+          player_face_url: player.face_url,
+          from_team_id: player.team_id,
+          from_team_name: selectedTeamForSquad.name,
+          to_team_id: targetTeamId || null,
+          to_team_name: targetTeamName,
+          amount: player.value,
+          transfer_type: targetTeamId ? "trade" : "release"
+        });
+
+      // Notificar os envolvidos
+      const notificationEntries = [];
+      if (selectedTeamForSquad.user_id) {
+        notificationEntries.push({
+          user_id: selectedTeamForSquad.user_id,
+          title: "Jogador Movido pelo Admin",
+          content: `O jogador ${player.name} foi removido do seu elenco por intervenção do administrador.`
+        });
+      }
+      if (targetTeamId && targetTeam?.user_id) {
+        notificationEntries.push({
+          user_id: targetTeam.user_id,
+          title: "Jogador Adicionado pelo Admin",
+          content: `O jogador ${player.name} foi adicionado ao seu elenco por intervenção do administrador.`
+        });
+      }
+
+      if (notificationEntries.length > 0) {
+        await supabase.from("notifications").insert(notificationEntries);
+      }
+
+      alert("Transferência realizada com sucesso!");
+      refreshSquad(player.team_id);
+    } catch (err) {
+      alert("Erro ao transferir: " + err.message);
+    }
+  };
+
+  // Liberar jogador diretamente
+  const handleReleasePlayerDirect = async (player) => {
+    const confirm = window.confirm(`Tem certeza de que deseja liberar ${player.name} para o mercado? Ele se tornará Agente Livre.`);
+    if (!confirm) return;
+
+    try {
+      const { error } = await supabase
+        .from("players")
+        .update({ team_id: null })
+        .eq("id", player.id);
+
+      if (error) throw error;
+
+      // Registrar histórico
+      await supabase
+        .from("transfer_history")
+        .insert({
+          player_id: player.id,
+          player_name: player.name,
+          player_position: player.position,
+          player_rating: player.rating,
+          player_face_url: player.face_url,
+          from_team_id: player.team_id,
+          from_team_name: selectedTeamForSquad.name,
+          to_team_id: null,
+          to_team_name: "Agente Livre",
+          amount: player.value,
+          transfer_type: "release"
+        });
+
+      // Notificar treinador
+      if (selectedTeamForSquad.user_id) {
+        await supabase.from("notifications").insert({
+          user_id: selectedTeamForSquad.user_id,
+          title: "Jogador Dispensado (Admin)",
+          content: `O jogador ${player.name} foi dispensado e liberado para Agentes Livres por intervenção do admin.`
+        });
+      }
+
+      alert("Jogador dispensado com sucesso!");
+      refreshSquad(player.team_id);
+    } catch (err) {
+      alert("Erro ao dispensar jogador: " + err.message);
     }
   };
 
@@ -265,6 +474,13 @@ export default function AdminUsersPage() {
                           {teamData && (
                             <>
                               <button
+                                onClick={() => openSquadModal(teamData)}
+                                disabled={actionLoading !== null}
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all animate-fadeIn"
+                              >
+                                ⚽ Elenco
+                              </button>
+                              <button
                                 onClick={() => openFinancesModal(teamData)}
                                 disabled={actionLoading !== null}
                                 className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-all"
@@ -355,6 +571,198 @@ export default function AdminUsersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Gerenciamento de Elenco */}
+      {squadModalOpen && selectedTeamForSquad && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-4xl glass-panel p-6 sm:p-8 rounded-2xl border border-white/10 bg-[#090d16] shadow-2xl space-y-6 my-8">
+            <div className="flex justify-between items-center border-b border-white/5 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white">Gerenciar Elenco - {selectedTeamForSquad.name}</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Transfira, edite ou dispense jogadores deste clube.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setSquadModalOpen(false);
+                  setSelectedTeamForSquad(null);
+                  setSquadPlayers([]);
+                }}
+                className="text-gray-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Barra de Filtro */}
+            <div className="flex items-center gap-3">
+              <input
+                type="text"
+                placeholder="Filtrar jogadores por nome ou posição..."
+                value={squadFilter}
+                onChange={(e) => setSquadFilter(e.target.value)}
+                className="w-full max-w-md bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs text-white outline-none focus:border-[#10b981]"
+              />
+            </div>
+
+            {/* Lista de Jogadores */}
+            {squadLoading ? (
+              <div className="flex h-32 items-center justify-center">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#10b981] border-t-transparent"></div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-white/5 rounded-xl max-h-96 overflow-y-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-white/5 bg-white/[0.02] font-bold text-gray-400 uppercase tracking-wider">
+                      <th className="px-4 py-3">Jogador</th>
+                      <th className="px-4 py-3">Classificação</th>
+                      <th className="px-4 py-3">Posição</th>
+                      <th className="px-4 py-3">Salário Semanal</th>
+                      <th className="px-4 py-3">Valor Passe</th>
+                      <th className="px-4 py-3 text-center">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-gray-200">
+                    {squadPlayers
+                      .filter(p => {
+                        const q = squadFilter.toLowerCase();
+                        return (p.name || "").toLowerCase().includes(q) || (p.position || "").toLowerCase().includes(q);
+                      })
+                      .map(player => {
+                        const isEditing = editingPlayerId === player.id;
+                        return (
+                          <tr key={player.id} className="hover:bg-white/[0.01]">
+                            {/* Nome e Foto */}
+                            <td className="px-4 py-3 flex items-center gap-2">
+                              {player.face_url ? (
+                                <img src={player.face_url} alt="" className="h-7 w-7 rounded-full object-cover" />
+                              ) : (
+                                <span className="text-sm">👤</span>
+                              )}
+                              <span className="font-semibold text-white">{player.name}</span>
+                            </td>
+
+                            {/* Overall */}
+                            <td className="px-4 py-3">
+                              <span className="px-2 py-0.5 rounded bg-white/5 text-white font-bold">
+                                {player.rating}
+                              </span>
+                            </td>
+
+                            {/* Posição */}
+                            <td className="px-4 py-3">
+                              <span className="text-gray-400">{player.position}</span>
+                            </td>
+
+                            {/* Salário */}
+                            <td className="px-4 py-3">
+                              {isEditing ? (
+                                <input
+                                  type="number"
+                                  value={editPlayerWage}
+                                  onChange={(e) => setEditPlayerWage(e.target.value)}
+                                  className="w-20 bg-[#060913] border border-white/10 rounded px-1.5 py-1 text-white text-xs"
+                                />
+                              ) : (
+                                `R$ ${parseFloat(player.wage).toLocaleString("pt-BR")}`
+                              )}
+                            </td>
+
+                            {/* Passe */}
+                            <td className="px-4 py-3">
+                              {isEditing ? (
+                                <input
+                                  type="number"
+                                  value={editPlayerValue}
+                                  onChange={(e) => setEditPlayerValue(e.target.value)}
+                                  className="w-24 bg-[#060913] border border-white/10 rounded px-1.5 py-1 text-white text-xs"
+                                />
+                              ) : (
+                                `R$ ${parseFloat(player.value).toLocaleString("pt-BR")}`
+                              )}
+                            </td>
+
+                            {/* Ações Rápidas */}
+                            <td className="px-4 py-3 whitespace-nowrap text-center">
+                              <div className="flex justify-center items-center gap-2">
+                                {isEditing ? (
+                                  <>
+                                    <button
+                                      onClick={() => handleSavePlayerEdit(player)}
+                                      className="px-2 py-1 bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30 hover:bg-[#10b981] hover:text-white rounded"
+                                    >
+                                      ✓ Salvar
+                                    </button>
+                                    <button
+                                      onClick={() => setEditingPlayerId(null)}
+                                      className="px-2 py-1 bg-white/5 text-gray-300 border border-white/10 rounded"
+                                    >
+                                      Cancelar
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={() => startEditPlayer(player)}
+                                      className="px-2 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500 hover:text-white rounded"
+                                    >
+                                      ✏️ Editar
+                                    </button>
+                                    
+                                    {/* Transferir Dropdown Select */}
+                                    <select
+                                      onChange={(e) => {
+                                        if (e.target.value !== "") {
+                                          handleTransferPlayer(player, e.target.value === "free" ? null : e.target.value);
+                                          e.target.value = ""; // Reset dropdown
+                                        }
+                                      }}
+                                      defaultValue=""
+                                      className="bg-[#090d16] border border-white/10 rounded px-2 py-1 text-xs text-gray-300 outline-none"
+                                    >
+                                      <option value="" disabled>🔄 Mover...</option>
+                                      <option value="free">Agente Livre</option>
+                                      {allTeams
+                                        .filter(t => t.id !== selectedTeamForSquad.id)
+                                        .map(t => (
+                                          <option key={t.id} value={t.id}>{t.name}</option>
+                                        ))}
+                                    </select>
+
+                                    <button
+                                      onClick={() => handleReleasePlayerDirect(player)}
+                                      className="px-2 py-1 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white rounded"
+                                    >
+                                      🗑️ Liberar
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setSquadModalOpen(false);
+                  setSelectedTeamForSquad(null);
+                  setSquadPlayers([]);
+                }}
+                className="rounded-xl border border-white/10 px-5 py-2 text-xs font-bold text-gray-300 hover:bg-white/5 transition-all"
+              >
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}

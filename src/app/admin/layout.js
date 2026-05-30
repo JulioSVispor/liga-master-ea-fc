@@ -68,11 +68,16 @@ export default function AdminLayout({ children }) {
 
   const menuItems = [
     { name: "Visão Geral", path: "/admin", icon: "📊" },
-    { name: "Ligas & Copas", path: "/admin/leagues", icon: "🏆" },
+    { name: "Competições", path: "/admin/leagues", icon: "🏆" },
     { name: "Usuários & Times", path: "/admin/users", icon: "👥" },
     { name: "Importar Jogadores", path: "/admin/import", icon: "📥" },
-    { name: "Disputas de Jogos", path: "/admin/disputes", icon: "⚔️" },
+    { name: "Arbitragem", path: "/admin/arbitration", icon: "⚖️" },
     { name: "Auditoria Financeira", path: "/admin/audit", icon: "🧾" },
+    { name: "Escudos", path: "/admin/shields", icon: "🛡️" },
+    { name: "Troféus", path: "/admin/trophies", icon: "🏅" },
+    { name: "Lista de Espera", path: "/admin/waitlist", icon: "📋" },
+    { name: "Patrocínios", path: "/admin/sponsorships", icon: "💼" },
+    { name: "Finalizar Temporada", path: "/admin/season", icon: "🏁" },
     { name: "Configurações", path: "/admin/settings", icon: "⚙️" },
   ];
 

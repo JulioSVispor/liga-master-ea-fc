@@ -214,9 +214,17 @@ export default function UserDashboardLayout({ children }) {
         {team && (
           <div className="p-6 border-b border-white/5 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-[#3b82f6]/10 text-[#3b82f6] flex items-center justify-center font-bold border border-[#3b82f6]/20 text-lg">
-                🛡️
-              </div>
+              {team.badge_url ? (
+                <img
+                  src={team.badge_url}
+                  alt={team.name}
+                  className="h-10 w-10 rounded-xl object-contain bg-white/5 border border-white/10"
+                />
+              ) : (
+                <div className="h-10 w-10 rounded-xl bg-[#3b82f6]/10 text-[#3b82f6] flex items-center justify-center font-bold border border-[#3b82f6]/20 text-lg">
+                  🛡️
+                </div>
+              )}
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-white truncate">{team.name}</p>
                 <p className="text-xs text-gray-400 truncate">{team.real_club_name}</p>

@@ -4,70 +4,52 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
-// Função de cálculo de Química e Penalidades de Posicionamento (Fase 3)
-const getAdjustedRating = (player, slotTitle) => {
-  if (!player) return { rating: 0, penalty: 0 };
-  
-  const nat = player.position.toUpperCase();
-  const slot = slotTitle.toUpperCase();
-  
-  if (nat === slot) return { rating: player.rating, penalty: 0 };
-  
-  const isDef = ["CB", "LB", "RB", "LWB", "RWB", "ZAG", "LE", "LD", "ZAE", "ZAD", "LWE", "LWD"].includes(nat) && 
-                ["CB", "LB", "RB", "LWB", "RWB", "ZAG", "LE", "LD", "ZAE", "ZAD", "LWE", "LWD"].includes(slot);
-  const isMid = ["CM", "CDM", "CAM", "LM", "RM", "VOL", "MC", "MEI", "ME", "MD"].includes(nat) && 
-                ["CM", "CDM", "CAM", "LM", "RM", "VOL", "MC", "MEI", "ME", "MD"].includes(slot);
-  const isAtt = ["ST", "CF", "LF", "RF", "LW", "RW", "PE", "PD", "ATA"].includes(nat) && 
-                ["ST", "CF", "LF", "RF", "LW", "RW", "PE", "PD", "ATA"].includes(slot);
-  
-  if ((nat === "GK" && slot !== "GK") || (nat !== "GK" && slot === "GK")) {
-    return { rating: Math.max(10, player.rating - 30), penalty: 30, type: "severa" };
-  }
-  
-  if (isDef || isMid || isAtt) {
-    const equivalents = [
-      ["CB", "ZAG"], ["CB", "ZAE"], ["CB", "ZAD"],
-      ["LB", "LE"], ["LB", "LWE"],
-      ["RB", "LD"], ["RB", "LWD"],
-      ["ST", "ATA"], ["CF", "ATA"],
-      ["LW", "PE"], ["RW", "PD"],
-      ["CDM", "VOL"], ["CAM", "MEI"],
-      ["LM", "ME"], ["RM", "MD"], ["CM", "MC"]
-    ];
-    
-    const isEquivalent = equivalents.some(pair => 
-      (pair[0] === nat && pair[1] === slot) || (pair[1] === nat && pair[0] === slot)
-    );
-    
-    if (isEquivalent) {
-      return { rating: player.rating, penalty: 0 };
-    }
-    
-    return { rating: Math.max(10, player.rating - 5), penalty: 5, type: "leve" };
-  }
-  
-  return { rating: Math.max(10, player.rating - 15), penalty: 15, type: "moderada" };
-};
-
 export default function UserDashboard() {
   const [team, setTeam] = useState(null);
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
   const [savingFormation, setSavingFormation] = useState(false);
-
-  // Estados de Escalação Manual (Fase 3)
-  const [selectedSlotIndex, setSelectedSlotIndex] = useState(null);
-  const [showEscalationModal, setShowEscalationModal] = useState(false);
   const [savingEscalation, setSavingEscalation] = useState(false);
+  const [settings, setSettings] = useState({});
+
+  // Drag and Drop
+  const [draggingPlayer, setDraggingPlayer] = useState(null);
+  const [dragOverSlot, setDragOverSlot] = useState(null);
+
+  // Modal de Ajuste Salarial
+  const [showSalaryModal, setShowSalaryModal] = useState(false);
+  const [selectedPlayerForSalary, setSelectedPlayerForSalary] = useState(null);
+  const [newSalary, setNewSalary] = useState("");
+  const [salaryError, setSalaryError] = useState("");
+  const [salarySuccess, setSalarySuccess] = useState("");
+  const [savingSalary, setSavingSalary] = useState(false);
+
+  // Modal de Leilão
+  const [showAuctionModal, setShowAuctionModal] = useState(false);
+  const [selectedPlayerForAuction, setSelectedPlayerForAuction] = useState(null);
+  const [auctionError, setAuctionError] = useState("");
+  const [auctionSuccess, setAuctionSuccess] = useState("");
+  const [savingAuction, setSavingAuction] = useState(false);
+
+  // Carregar Settings
+  const loadSettings = async () => {
+    const { data } = await supabase.from("settings").select("key, value");
+    if (data) {
+      const map = {};
+      data.forEach((s) => (map[s.key] = s.value));
+      setSettings(map);
+    }
+  };
 
   // Carregar dados do clube e do elenco
   const loadClubData = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) return;
 
-      // Carregar Time
       const { data: teamData } = await supabase
         .from("teams")
         .select("*")
@@ -77,7 +59,6 @@ export default function UserDashboard() {
       if (teamData) {
         setTeam(teamData);
 
-        // Carregar elenco completo
         const { data: squad } = await supabase
           .from("players")
           .select("*")
@@ -95,38 +76,83 @@ export default function UserDashboard() {
 
   useEffect(() => {
     loadClubData();
+    loadSettings();
   }, []);
 
-  // Dispensa de jogador (reembolso e liberação de folha salarial)
+  const [uploadingShield, setUploadingShield] = useState(false);
+  const [shieldAlert, setShieldAlert] = useState(null);
+
+  const triggerShieldAlert = (type, message) => {
+    setShieldAlert({ type, message });
+    setTimeout(() => setShieldAlert(null), 5000);
+  };
+
+  const handleShieldUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !team) return;
+
+    setUploadingShield(true);
+    triggerShieldAlert("info", "Fazendo upload do escudo...");
+    try {
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${team.id}-${Math.round(Date.now() / 1000)}.${fileExt}`;
+      const filePath = `user-shields/${fileName}`;
+
+      // Upload para o storage do supabase
+      const { error: uploadError } = await supabase.storage
+        .from("shields")
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Pegar URL pública
+      const { data: { publicUrl } } = supabase.storage
+        .from("shields")
+        .getPublicUrl(filePath);
+
+      // Atualizar no banco
+      const { error: updateError } = await supabase
+        .from("teams")
+        .update({ badge_url: publicUrl })
+        .eq("id", team.id);
+
+      if (updateError) throw updateError;
+
+      setTeam((prev) => ({ ...prev, badge_url: publicUrl }));
+      triggerShieldAlert("success", "Escudo do time atualizado com sucesso!");
+
+      // Enviar notificação
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) {
+        await supabase.from("notifications").insert({
+          user_id: session.user.id,
+          title: "Escudo Atualizado",
+          content: "Você alterou o escudo do seu clube com sucesso!"
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      triggerShieldAlert("error", "Erro ao fazer upload do escudo: " + err.message);
+    } finally {
+      setUploadingShield(false);
+    }
+  };
+
+  // Dispensa de jogador
   const handleReleasePlayer = async (player) => {
     if (!team) return;
-
-    const confirmRelease = window.confirm(
-      `Tem certeza que deseja dispensar ${player.name}? \nIsso liberará R$ ${player.wage.toLocaleString("pt-BR")} de folha salarial e reembolsará R$ ${parseFloat(player.value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} no seu orçamento.`
-    );
-
-    if (!confirmRelease) return;
-
     setActionLoading(player.id);
-
     try {
       const { data, error } = await supabase.rpc("release_player", {
         p_player_id: player.id,
         p_team_id: team.id,
       });
-
       if (error) throw error;
-
       if (data && data.success) {
-        alert(data.message);
-        
-        // Recarregar tudo para consistência com o histórico e finanças
         await loadClubData();
-      } else {
-        alert(data.message || "Houve uma falha ao tentar dispensar o jogador.");
       }
     } catch (err) {
-      alert("Erro ao dispensar: " + err.message);
+      console.error("Erro ao dispensar:", err);
     } finally {
       setActionLoading(null);
     }
@@ -141,43 +167,43 @@ export default function UserDashboard() {
         .from("teams")
         .update({ formation: newFormation })
         .eq("id", team.id);
-
       if (error) throw error;
-
-      setTeam((prev) => ({
-        ...prev,
-        formation: newFormation,
-      }));
+      setTeam((prev) => ({ ...prev, formation: newFormation }));
     } catch (err) {
       console.error("Erro ao salvar formação:", err);
-      alert("Erro ao salvar formação: " + err.message);
     } finally {
       setSavingFormation(false);
     }
   };
 
-  // Escalar jogador em um slot manual (Fase 3)
-  const handleSelectPlayerForSlot = async (player) => {
-    if (selectedSlotIndex === null || !team) return;
-
+  // Escalar jogador em um slot via Drag & Drop
+  const handleDropPlayerOnSlot = async (player, slotIndex) => {
+    if (!team) return;
     setSavingEscalation(true);
     try {
-      const currentLineup = Array.isArray(team.lineup) ? [...team.lineup] : Array(11).fill(null);
-      
-      const isLineupEmpty = !currentLineup.some(id => id !== null && id !== undefined);
+      const currentLineup = Array.isArray(team.lineup)
+        ? [...team.lineup]
+        : Array(11).fill(null);
+
+      const isLineupEmpty = !currentLineup.some(
+        (id) => id !== null && id !== undefined
+      );
       let targetLineup = currentLineup;
-      
+
       if (isLineupEmpty) {
-        targetLineup = fieldPlayers.map(s => s.player?.id || null);
+        targetLineup = fieldPlayers.map((s) => s.player?.id || null);
       }
 
-      const existingIndex = targetLineup.findIndex(id => id && id.toString() === player.id.toString());
+      // Se jogador já está em outro slot, trocar
+      const existingIndex = targetLineup.findIndex(
+        (id) => id && id.toString() === player.id.toString()
+      );
       if (existingIndex !== -1) {
-        const playerInTargetSlot = targetLineup[selectedSlotIndex];
+        const playerInTargetSlot = targetLineup[slotIndex];
         targetLineup[existingIndex] = playerInTargetSlot || null;
       }
 
-      targetLineup[selectedSlotIndex] = player.id;
+      targetLineup[slotIndex] = player.id;
 
       const { error } = await supabase
         .from("teams")
@@ -186,27 +212,22 @@ export default function UserDashboard() {
 
       if (error) throw error;
 
-      setTeam(prev => ({
-        ...prev,
-        lineup: targetLineup
-      }));
-
-      setShowEscalationModal(false);
-      setSelectedSlotIndex(null);
+      setTeam((prev) => ({ ...prev, lineup: targetLineup }));
     } catch (err) {
-      alert("Erro ao salvar escalação: " + err.message);
+      console.error("Erro ao salvar escalação:", err);
     } finally {
       setSavingEscalation(false);
     }
   };
 
-  // Remover jogador de um slot manual (Fase 3)
+  // Remover jogador de um slot
   const handleRemovePlayerFromSlot = async (slotIndex) => {
     if (!team) return;
-
     setSavingEscalation(true);
     try {
-      const currentLineup = Array.isArray(team.lineup) ? [...team.lineup] : fieldPlayers.map(s => s.player?.id || null);
+      const currentLineup = Array.isArray(team.lineup)
+        ? [...team.lineup]
+        : fieldPlayers.map((s) => s.player?.id || null);
       currentLineup[slotIndex] = null;
 
       const { error } = await supabase
@@ -215,18 +236,76 @@ export default function UserDashboard() {
         .eq("id", team.id);
 
       if (error) throw error;
-
-      setTeam(prev => ({
-        ...prev,
-        lineup: currentLineup
-      }));
-
-      setShowEscalationModal(false);
-      setSelectedSlotIndex(null);
+      setTeam((prev) => ({ ...prev, lineup: currentLineup }));
     } catch (err) {
-      alert("Erro ao remover jogador da escalação: " + err.message);
+      console.error("Erro ao remover jogador:", err);
     } finally {
       setSavingEscalation(false);
+    }
+  };
+
+  // Ajuste Salarial
+  const handleSalaryAdjust = async () => {
+    if (!selectedPlayerForSalary || !team) return;
+    const salNum = parseFloat(newSalary);
+    if (!salNum || salNum <= 0) {
+      setSalaryError("Digite um salário válido.");
+      return;
+    }
+    setSalaryError("");
+    setSavingSalary(true);
+    try {
+      const { data, error } = await supabase.rpc("adjust_player_salary", {
+        p_player_id: selectedPlayerForSalary.id,
+        p_team_id: team.id,
+        p_new_wage: salNum,
+      });
+      if (error) throw error;
+      if (data && data.success === false) {
+        setSalaryError(data.message || "Erro ao ajustar salário.");
+      } else {
+        setSalarySuccess("Salário ajustado com sucesso!");
+        await loadClubData();
+        setTimeout(() => {
+          setShowSalaryModal(false);
+          setSalarySuccess("");
+          setNewSalary("");
+          setSelectedPlayerForSalary(null);
+        }, 1500);
+      }
+    } catch (err) {
+      setSalaryError("Erro ao ajustar salário: " + err.message);
+    } finally {
+      setSavingSalary(false);
+    }
+  };
+
+  // Enviar para Leilão
+  const handleSubmitAuction = async () => {
+    if (!selectedPlayerForAuction || !team) return;
+    setSavingAuction(true);
+    setAuctionError("");
+    try {
+      const { data, error } = await supabase.rpc("player_submit_to_auction", {
+        p_player_id: selectedPlayerForAuction.id,
+        p_team_id: team.id,
+      });
+      if (error) throw error;
+      if (data && data.success === false) {
+        setAuctionError(data.message || "Erro ao enviar para leilão.");
+      } else {
+        setAuctionSuccess("Jogador enviado para leilão com sucesso!");
+        await loadClubData();
+        setTimeout(() => {
+          setShowAuctionModal(false);
+          setAuctionSuccess("");
+          setSelectedPlayerForAuction(null);
+        }, 1500);
+      }
+    } catch (err) {
+      setAuctionError("Erro: " + err.message);
+    } finally {
+      setSavingAuction(false);
     }
   };
 
@@ -259,7 +338,7 @@ export default function UserDashboard() {
     );
   }
 
-  // Agrupamentos táticos para listagem
+  // Agrupamentos táticos
   const attackPositions = ["ST", "CF", "LF", "RF", "LW", "RW"];
   const midfieldPositions = ["CM", "CDM", "CAM", "LM", "RM", "LCM", "RCM", "LDM", "RDM", "LAM", "RAM"];
   const defensePositions = ["CB", "RCB", "LCB", "LB", "RB", "LWB", "RWB", "SW"];
@@ -276,14 +355,21 @@ export default function UserDashboard() {
       !defensePositions.includes(p.position)
   );
 
-  // Estatísticas do clube
-  const avgRating = players.length > 0 ? Math.round(players.reduce((sum, p) => sum + p.rating, 0) / players.length) : 0;
+  const avgRating =
+    players.length > 0
+      ? Math.round(players.reduce((sum, p) => sum + p.rating, 0) / players.length)
+      : 0;
   const squadWages = players.reduce((sum, p) => sum + parseFloat(p.wage || 0), 0);
+
+  // Configurações de Settings
+  const salaryWindowOpen = settings.salary_window_open === "true";
+  const allowAuction = settings.allow_player_auction === "true";
+  const salaryRatio = parseFloat(settings.salary_to_value_ratio || 1);
 
   // Algoritmo de mapeamento de jogadores para slots do campo
   const getFormationSlots = () => {
     const sortedPlayers = [...players].sort((a, b) => b.rating - a.rating);
-    
+
     const gksPool = sortedPlayers.filter((p) => p.position === "GK");
     const defsPool = sortedPlayers.filter((p) => defensePositions.includes(p.position));
     const midsPool = sortedPlayers.filter((p) => midfieldPositions.includes(p.position));
@@ -318,7 +404,7 @@ export default function UserDashboard() {
         { role: "MID", title: "MC", x: 62, y: 48 },
         { role: "MID", title: "MD", x: 85, y: 46 },
         { role: "ATT", title: "ATA", x: 35, y: 15 },
-        { role: "ATT", title: "ATA", x: 65, y: 15 }
+        { role: "ATT", title: "ATA", x: 65, y: 15 },
       ];
     } else if (formation === "3-5-2") {
       slots = [
@@ -332,7 +418,7 @@ export default function UserDashboard() {
         { role: "MID", title: "MEI", x: 50, y: 34 },
         { role: "MID", title: "MD", x: 88, y: 40 },
         { role: "ATT", title: "ATA", x: 35, y: 14 },
-        { role: "ATT", title: "ATA", x: 65, y: 14 }
+        { role: "ATT", title: "ATA", x: 65, y: 14 },
       ];
     } else if (formation === "4-2-3-1") {
       slots = [
@@ -346,7 +432,7 @@ export default function UserDashboard() {
         { role: "MID", title: "ME", x: 18, y: 32 },
         { role: "MID", title: "MEI", x: 50, y: 28 },
         { role: "MID", title: "MD", x: 82, y: 32 },
-        { role: "ATT", title: "ATA", x: 50, y: 10 }
+        { role: "ATT", title: "ATA", x: 50, y: 10 },
       ];
     } else if (formation === "3-4-3") {
       slots = [
@@ -360,7 +446,7 @@ export default function UserDashboard() {
         { role: "MID", title: "MD", x: 88, y: 48 },
         { role: "ATT", title: "PE", x: 20, y: 18 },
         { role: "ATT", title: "ATA", x: 50, y: 12 },
-        { role: "ATT", title: "PD", x: 80, y: 18 }
+        { role: "ATT", title: "PD", x: 80, y: 18 },
       ];
     } else if (formation === "5-3-2") {
       slots = [
@@ -374,7 +460,7 @@ export default function UserDashboard() {
         { role: "MID", title: "MC", x: 50, y: 48 },
         { role: "MID", title: "MC", x: 72, y: 46 },
         { role: "ATT", title: "ATA", x: 35, y: 15 },
-        { role: "ATT", title: "ATA", x: 65, y: 15 }
+        { role: "ATT", title: "ATA", x: 65, y: 15 },
       ];
     } else {
       // 4-3-3 (Padrão)
@@ -389,7 +475,7 @@ export default function UserDashboard() {
         { role: "MID", title: "MC", x: 75, y: 46 },
         { role: "ATT", title: "PE", x: 20, y: 18 },
         { role: "ATT", title: "ATA", x: 50, y: 12 },
-        { role: "ATT", title: "PD", x: 80, y: 18 }
+        { role: "ATT", title: "PD", x: 80, y: 18 },
       ];
     }
 
@@ -419,10 +505,10 @@ export default function UserDashboard() {
     const finalMids = fillRemaining(selectedMids, midCount);
     const finalAtts = fillRemaining(selectedAtts, attCount);
 
-    let gkIdx = 0;
-    let defIdx = 0;
-    let midIdx = 0;
-    let attIdx = 0;
+    let gkIdx = 0,
+      defIdx = 0,
+      midIdx = 0,
+      attIdx = 0;
 
     const autoSlots = slots.map((slot) => {
       let p = null;
@@ -430,12 +516,11 @@ export default function UserDashboard() {
       else if (slot.role === "DEF" && defIdx < finalDefs.length) p = finalDefs[defIdx++];
       else if (slot.role === "MID" && midIdx < finalMids.length) p = finalMids[midIdx++];
       else if (slot.role === "ATT" && attIdx < finalAtts.length) p = finalAtts[attIdx++];
-
       return { ...slot, player: p };
     });
 
     const savedLineup = Array.isArray(team.lineup) ? team.lineup : [];
-    const hasAnyStarters = savedLineup.some(id => id !== null && id !== undefined);
+    const hasAnyStarters = savedLineup.some((id) => id !== null && id !== undefined);
 
     if (!hasAnyStarters) {
       return autoSlots;
@@ -445,81 +530,234 @@ export default function UserDashboard() {
       const playerId = savedLineup[index];
       let p = null;
       if (playerId) {
-        p = players.find(player => player.id.toString() === playerId.toString());
+        p = players.find((player) => player.id.toString() === playerId.toString());
       }
       return { ...slot, player: p };
     });
   };
 
   const fieldPlayers = getFormationSlots();
-  const fieldPlayerIds = fieldPlayers.map(s => s.player?.id).filter(id => id !== undefined && id !== null);
-  const benchPlayers = players.filter(p => !fieldPlayerIds.includes(p.id));
+  const fieldPlayerIds = fieldPlayers
+    .map((s) => s.player?.id)
+    .filter((id) => id !== undefined && id !== null);
+  const benchPlayers = players.filter((p) => !fieldPlayerIds.includes(p.id));
 
+  // Renderizar Lista/Tabela do Elenco
   const renderPlayerCategory = (title, categoryPlayers) => {
     if (categoryPlayers.length === 0) return null;
 
     return (
-      <div className="space-y-4 pt-4">
-        <h3 className="text-sm font-bold text-[#3b82f6] uppercase tracking-wider border-l-2 border-[#3b82f6] pl-2">
+      <div className="space-y-3 pt-6 first:pt-0">
+        <h3 className="text-xs font-bold text-[#3b82f6] uppercase tracking-wider border-l-2 border-[#3b82f6] pl-2">
           {title} ({categoryPlayers.length})
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {categoryPlayers.map((player) => (
-            <div
-              key={player.id}
-              className="glass-card rounded-xl overflow-hidden flex flex-col justify-between border border-white/5 bg-[#090d16]/30 relative"
-            >
-              {/* Overall & Posição no Topo */}
-              <div className="absolute top-3 left-3 flex flex-col items-center">
-                <span className="text-xl font-black text-white leading-none">{player.rating}</span>
-                <span className="text-[9px] font-bold text-gray-400 uppercase mt-0.5">{player.position}</span>
-              </div>
-
-              {/* Avatar e Nome */}
-              <div className="pt-6 pb-2 px-4 flex flex-col items-center">
-                <div className="h-16 w-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden mb-2">
-                  {player.face_url ? (
-                    <img src={player.face_url} alt={player.name} className="h-full w-full object-cover scale-110" />
-                  ) : (
-                    <span className="text-2xl text-gray-600">👤</span>
-                  )}
-                </div>
-                <p className="text-xs font-bold text-white text-center truncate w-full">{player.name}</p>
-                <p className="text-[9px] text-gray-500">{player.nation || "Desconhecida"} • {player.age || "--"} anos</p>
-              </div>
-
-              {/* Detalhes Financeiros */}
-              <div className="p-3 bg-white/[0.01] border-t border-white/5 space-y-3">
-                <div className="flex justify-between text-[10px] text-gray-400">
-                  <span>Valor: <strong className="text-emerald-400">R$ {(player.value / 1000).toFixed(0)}k</strong></span>
-                  <span>Salário: <strong className="text-gray-300">R$ {player.wage.toLocaleString("pt-BR")}</strong></span>
-                </div>
-                <button
-                  onClick={() => handleReleasePlayer(player)}
-                  disabled={actionLoading !== null}
-                  className="w-full rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 py-1.5 text-[10px] font-bold text-red-400 transition-all active:scale-[0.98] disabled:opacity-50"
+        <div className="overflow-x-auto rounded-xl border border-white/5 bg-[#090d16]/20">
+          <table className="w-full text-left text-sm text-gray-300 border-collapse">
+            <thead>
+              <tr className="text-[10px] font-bold uppercase text-gray-500 border-b border-white/5 bg-white/[0.01]">
+                <th className="py-3 px-4 text-center w-16">Foto</th>
+                <th className="py-3 px-4">Jogador</th>
+                <th className="py-3 px-4 text-center w-20">Posição</th>
+                <th className="py-3 px-4 text-center w-20">Rating</th>
+                <th className="py-3 px-4 text-right w-32">Passe (Valor)</th>
+                <th className="py-3 px-4 text-right w-32">Salário</th>
+                <th className="py-3 px-4 text-center w-36">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {categoryPlayers.map((player) => (
+                <tr
+                  key={player.id}
+                  draggable
+                  onDragStart={(e) => {
+                    setDraggingPlayer(player);
+                    e.dataTransfer.effectAllowed = "move";
+                  }}
+                  onDragEnd={() => setDraggingPlayer(null)}
+                  className={`hover:bg-white/[0.03] transition-colors cursor-grab active:cursor-grabbing ${
+                    draggingPlayer?.id === player.id ? "opacity-35" : "opacity-100"
+                  }`}
                 >
-                  {actionLoading === player.id ? "Dispensando..." : "Dispensar Jogador"}
-                </button>
-              </div>
-            </div>
-          ))}
+                  {/* Foto do Jogador */}
+                  <td className="py-2.5 px-4">
+                    <div className="h-10 w-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden mx-auto flex-shrink-0">
+                      {player.face_url ? (
+                        <img
+                          src={player.face_url}
+                          alt=""
+                          className="h-full w-full object-cover scale-110"
+                          draggable={false}
+                        />
+                      ) : (
+                        <span className="text-base text-gray-500">👤</span>
+                      )}
+                    </div>
+                  </td>
+
+                  {/* Nome e Informações Básicas */}
+                  <td className="py-2.5 px-4 font-semibold text-white">
+                    <div>
+                      <p className="text-sm font-bold text-white">{player.name}</p>
+                      <p className="text-[10px] text-gray-400 font-normal">
+                        {player.nation || "Desconhecida"} • {player.age || "--"} anos
+                      </p>
+                    </div>
+                  </td>
+
+                  {/* Posição */}
+                  <td className="py-2.5 px-4 text-center">
+                    <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-[#0d1527] border border-white/10 text-gray-300">
+                      {player.position}
+                    </span>
+                  </td>
+
+                  {/* Rating */}
+                  <td className="py-2.5 px-4 text-center font-extrabold text-white text-base">
+                    {player.rating}
+                  </td>
+
+                  {/* Passe (Valor de Mercado) */}
+                  <td className="py-2.5 px-4 text-right font-semibold text-blue-400 text-xs">
+                    R$ {(player.value / 1000).toFixed(0)}k
+                  </td>
+
+                  {/* Salário */}
+                  <td className="py-2.5 px-4 text-right font-bold text-emerald-400 text-xs">
+                    R$ {player.wage.toLocaleString("pt-BR")}
+                  </td>
+
+                  {/* Botões de Ação */}
+                  <td className="py-2.5 px-4">
+                    <div className="flex items-center justify-center gap-2">
+                      {/* Ajuste Salarial */}
+                      <button
+                        title={salaryWindowOpen ? "Ajustar Salário" : "Ajustar Salário (Janela Fechada)"}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedPlayerForSalary(player);
+                          setNewSalary("");
+                          setSalaryError("");
+                          setSalarySuccess("");
+                          setShowSalaryModal(true);
+                        }}
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all border ${
+                          salaryWindowOpen
+                            ? "bg-emerald-500/10 hover:bg-emerald-500/25 border-emerald-500/20 text-emerald-400"
+                            : "bg-gray-500/10 hover:bg-gray-500/25 border-gray-500/20 text-gray-500 opacity-60"
+                        }`}
+                      >
+                        <span className="text-xs">💰</span>
+                      </button>
+
+                      {/* Enviar para Leilão */}
+                      {allowAuction && (
+                        <button
+                          title="Enviar para Leilão"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedPlayerForAuction(player);
+                            setAuctionError("");
+                            setAuctionSuccess("");
+                            setShowAuctionModal(true);
+                          }}
+                          className="w-8 h-8 rounded-lg bg-amber-500/10 hover:bg-amber-500/25 border border-amber-500/20 text-amber-400 flex items-center justify-center transition-all"
+                        >
+                          <span className="text-xs">🔨</span>
+                        </button>
+                      )}
+
+                      {/* Dispensar Jogador */}
+                      <button
+                        title="Dispensar Jogador"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleReleasePlayer(player);
+                        }}
+                        disabled={actionLoading !== null}
+                        className="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500/25 border border-red-500/20 text-red-400 flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <span className="text-xs">
+                          {actionLoading === player.id ? "⏳" : "❌"}
+                        </span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     );
   };
 
+  // Calcular novo passe em tempo real
+  const calculatedValue = newSalary
+    ? (parseFloat(newSalary) * salaryRatio).toLocaleString("pt-BR", {
+        minimumFractionDigits: 2,
+      })
+    : "—";
+
   return (
     <div className="space-y-8">
+      {/* Alerta de Escudo */}
+      {shieldAlert && (
+        <div
+          className={`p-4 rounded-xl text-sm border flex items-center gap-3 animate-fadeIn ${
+            shieldAlert.type === "success"
+              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+              : shieldAlert.type === "info"
+              ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+              : "bg-red-500/10 text-red-400 border-red-500/20"
+          }`}
+        >
+          <span>{shieldAlert.type === "success" ? "✅" : shieldAlert.type === "info" ? "ℹ️" : "⚠️"}</span>
+          <span>{shieldAlert.message}</span>
+        </div>
+      )}
+
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-            Painel do Clube
-          </h1>
-          <p className="mt-1 text-sm text-gray-400">
-            Gerencie o elenco do seu time, acompanhe as finanças e verifique o teto salarial.
-          </p>
+        <div className="flex items-center gap-4">
+          {/* Logo do Clube */}
+          {team && (
+            <div className="relative group select-none">
+              {team.badge_url ? (
+                <img
+                  src={team.badge_url}
+                  alt={team.name}
+                  className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl object-contain bg-white/5 border border-white/10 p-1.5 transition-all group-hover:scale-105 duration-200"
+                />
+              ) : (
+                <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl bg-[#3b82f6]/10 text-[#3b82f6] flex items-center justify-center font-bold border border-[#3b82f6]/20 text-3xl transition-all group-hover:scale-105 duration-200">
+                  🛡️
+                </div>
+              )}
+              
+              {/* Botão de Alteração */}
+              {settings.allow_shield_change === "true" && (
+                <label className="absolute inset-0 flex items-center justify-center bg-black/75 rounded-2xl opacity-0 group-hover:opacity-100 cursor-pointer transition-all duration-200 border border-[#10b981]/50">
+                  <span className="text-[10px] font-bold text-[#10b981] text-center px-1">Alterar Escudo</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleShieldUpload}
+                    disabled={uploadingShield}
+                    className="hidden"
+                  />
+                </label>
+              )}
+            </div>
+          )}
+
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+              {team ? team.name : "Painel do Clube"}
+            </h1>
+            <p className="mt-1 text-sm text-gray-400">
+              {team ? `${team.real_club_name} | Gerenciamento de Clube & Elenco` : "Gerencie seu clube e folha de pagamentos."}
+            </p>
+          </div>
         </div>
         <div className="flex gap-3">
           <Link
@@ -531,34 +769,51 @@ export default function UserDashboard() {
         </div>
       </div>
 
-      {/* Visão de Finanças do Time */}
+      {/* Finanças */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="glass-card p-5 rounded-2xl">
-          <span className="text-xs font-semibold text-gray-400 block mb-1">Orçamento Disponível</span>
+          <span className="text-xs font-semibold text-gray-400 block mb-1">
+            Orçamento Disponível
+          </span>
           <p className="text-2xl font-black text-emerald-400">
-            R$ {parseFloat(team.budget).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+            R${" "}
+            {parseFloat(team.budget).toLocaleString("pt-BR", {
+              minimumFractionDigits: 2,
+            })}
           </p>
-          <span className="text-[10px] text-gray-500 mt-1 block">Para contratações e lances de leilão</span>
+          <span className="text-[10px] text-gray-500 mt-1 block">
+            Para contratações e lances de leilão
+          </span>
         </div>
 
         <div className="glass-card p-5 rounded-2xl">
-          <span className="text-xs font-semibold text-gray-400 block mb-1">Folha Salarial Semanal</span>
+          <span className="text-xs font-semibold text-gray-400 block mb-1">
+            Folha Salarial Semanal
+          </span>
           <p className="text-2xl font-black text-gray-200">
             R$ {squadWages.toLocaleString("pt-BR")}
           </p>
-          <span className="text-[10px] text-gray-500 mt-1 block">Teto máximo definido: R$ {parseFloat(team.max_wage_cap).toLocaleString("pt-BR")}</span>
+          <span className="text-[10px] text-gray-500 mt-1 block">
+            Teto máximo: R$ {parseFloat(team.max_wage_cap).toLocaleString("pt-BR")}
+          </span>
         </div>
 
         <div className="glass-card p-5 rounded-2xl">
           <span className="text-xs font-semibold text-gray-400 block mb-1">Tamanho do Elenco</span>
           <p className="text-2xl font-black text-white">{players.length} / 24</p>
-          <span className="text-[10px] text-gray-500 mt-1 block">Jogadores contratados no time</span>
+          <span className="text-[10px] text-gray-500 mt-1 block">
+            Jogadores contratados no time
+          </span>
         </div>
 
         <div className="glass-card p-5 rounded-2xl">
-          <span className="text-xs font-semibold text-gray-400 block mb-1">Rating Médio do Time</span>
+          <span className="text-xs font-semibold text-gray-400 block mb-1">
+            Rating Médio do Time
+          </span>
           <p className="text-2xl font-black text-[#f59e0b]">⭐ {avgRating}</p>
-          <span className="text-[10px] text-gray-500 mt-1 block">Força média do time principal</span>
+          <span className="text-[10px] text-gray-500 mt-1 block">
+            Força média do time principal
+          </span>
         </div>
       </div>
 
@@ -567,7 +822,12 @@ export default function UserDashboard() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-white/5 pb-4">
           <div>
             <h2 className="text-lg font-bold text-white">Esquema Tático</h2>
-            <p className="text-xs text-gray-400">Jogadores escalados automaticamente pelo maior rating.</p>
+            <p className="text-xs text-gray-400">
+              Arraste jogadores do banco ou da lista para escalar.{" "}
+              {savingEscalation && (
+                <span className="text-[#10b981] animate-pulse">Salvando...</span>
+              )}
+            </p>
           </div>
           <div>
             <select
@@ -576,12 +836,24 @@ export default function UserDashboard() {
               disabled={savingFormation}
               className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-[#10b981]"
             >
-              <option value="4-3-3" className="bg-[#090d16] text-white">4-3-3</option>
-              <option value="4-4-2" className="bg-[#090d16] text-white">4-4-2</option>
-              <option value="4-2-3-1" className="bg-[#090d16] text-white">4-2-3-1</option>
-              <option value="3-5-2" className="bg-[#090d16] text-white">3-5-2</option>
-              <option value="3-4-3" className="bg-[#090d16] text-white">3-4-3</option>
-              <option value="5-3-2" className="bg-[#090d16] text-white">5-3-2</option>
+              <option value="4-3-3" className="bg-[#090d16] text-white">
+                4-3-3
+              </option>
+              <option value="4-4-2" className="bg-[#090d16] text-white">
+                4-4-2
+              </option>
+              <option value="4-2-3-1" className="bg-[#090d16] text-white">
+                4-2-3-1
+              </option>
+              <option value="3-5-2" className="bg-[#090d16] text-white">
+                3-5-2
+              </option>
+              <option value="3-4-3" className="bg-[#090d16] text-white">
+                3-4-3
+              </option>
+              <option value="5-3-2" className="bg-[#090d16] text-white">
+                5-3-2
+              </option>
             </select>
           </div>
         </div>
@@ -592,78 +864,139 @@ export default function UserDashboard() {
           </div>
         ) : (
           /* Campo de Futebol */
-          <div className="relative w-full max-w-2xl mx-auto aspect-[3/4] sm:aspect-[4/5] md:aspect-[3/4] bg-gradient-to-b from-[#0d2b17] to-[#144224] rounded-2xl overflow-hidden border border-emerald-500/25 shadow-2xl p-4">
+          <div
+            className="relative w-full max-w-2xl mx-auto rounded-2xl overflow-hidden shadow-2xl border border-emerald-900/60"
+            style={{
+              aspectRatio: "3/4",
+              background:
+                "repeating-linear-gradient(0deg, rgba(0,0,0,0.08) 0px, rgba(0,0,0,0.08) 1px, transparent 1px, transparent 40px), linear-gradient(180deg, #0a3d1a 0%, #0d4d22 25%, #0a3d1a 50%, #0d4d22 75%, #0a3d1a 100%)",
+            }}
+          >
             {/* Linhas do Campo */}
-            <div className="absolute inset-4 border border-white/10 rounded-lg pointer-events-none">
+            <div className="absolute inset-0 pointer-events-none">
+              {/* Borda do campo */}
+              <div className="absolute inset-[5%] border border-white/20 rounded-sm" />
               {/* Linha do Meio de Campo */}
-              <div className="absolute top-1/2 left-0 right-0 h-px bg-white/10" />
+              <div className="absolute top-1/2 left-[5%] right-[5%] h-px bg-white/20" />
               {/* Círculo Central */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-28 h-28 border border-white/10 rounded-full" />
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 border border-white/20 rounded-full" />
               {/* Ponto Central */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-white/25 rounded-full" />
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-white/40 rounded-full" />
               {/* Grande Área Superior (Ataque) */}
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-[15%] border-b border-x border-white/10" />
+              <div className="absolute top-[5%] left-1/2 -translate-x-1/2 w-[48%] h-[16%] border-b border-x border-white/15" />
+              {/* Pequena Área Superior */}
+              <div className="absolute top-[5%] left-1/2 -translate-x-1/2 w-[24%] h-[7%] border-b border-x border-white/10" />
               {/* Grande Área Inferior (Goleiro) */}
-              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/2 h-[15%] border-t border-x border-white/10" />
+              <div className="absolute bottom-[5%] left-1/2 -translate-x-1/2 w-[48%] h-[16%] border-t border-x border-white/15" />
+              {/* Pequena Área Inferior */}
+              <div className="absolute bottom-[5%] left-1/2 -translate-x-1/2 w-[24%] h-[7%] border-t border-x border-white/10" />
+              {/* Arco do Goleiro */}
+              <div
+                className="absolute bottom-[21%] left-1/2 -translate-x-1/2 w-20 h-10 border-t border-x border-white/10 rounded-t-full"
+                style={{ borderRadius: "50% 50% 0 0" }}
+              />
             </div>
 
             {/* Mapeamento de Jogadores */}
             {fieldPlayers.map((slot, index) => {
-              const chem = getAdjustedRating(slot.player, slot.title);
-              
+              const isHovered = dragOverSlot === index;
+              const isDraggingActive = draggingPlayer !== null;
+
               return (
                 <div
                   key={index}
-                  onClick={() => {
-                    setSelectedSlotIndex(index);
-                    setShowEscalationModal(true);
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    setDragOverSlot(index);
                   }}
-                  className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center select-none group cursor-pointer"
+                  onDragLeave={() => setDragOverSlot(null)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (draggingPlayer) handleDropPlayerOnSlot(draggingPlayer, index);
+                    setDraggingPlayer(null);
+                    setDragOverSlot(null);
+                  }}
+                  className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center select-none group"
                   style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
                 >
                   {slot.player ? (
                     /* Card do Jogador (Mini FUT) */
-                    <div className="flex flex-col items-center animate-fadeIn relative">
-                      <div className="relative h-14 w-14 sm:h-16 sm:w-16 rounded-xl bg-[#090d16]/90 border border-white/10 flex items-center justify-center overflow-hidden shadow-lg group-hover:scale-110 group-hover:border-[#10b981] transition-all duration-300">
+                    <div
+                      draggable
+                      onDragStart={(e) => {
+                        setDraggingPlayer(slot.player);
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragEnd={() => {
+                        setDraggingPlayer(null);
+                        setDragOverSlot(null);
+                      }}
+                      onDoubleClick={() => handleRemovePlayerFromSlot(index)}
+                      className={`flex flex-col items-center animate-fadeIn relative cursor-grab active:cursor-grabbing transition-all duration-200 ${
+                        draggingPlayer?.id === slot.player?.id ? "opacity-40" : "opacity-100"
+                      }`}
+                    >
+                      <div
+                        className={`relative h-14 w-14 sm:h-16 sm:w-16 rounded-xl bg-[#090d16]/90 flex items-center justify-center overflow-hidden shadow-lg transition-all duration-200 ${
+                          isHovered
+                            ? "border-2 border-[#10b981] scale-110 shadow-[0_0_12px_#10b981aa]"
+                            : "border border-white/20 group-hover:scale-105 group-hover:border-[#10b981]/50"
+                        }`}
+                      >
                         {/* Rating Badge */}
-                        <span className={`absolute top-1 left-1.5 text-[10px] font-black bg-[#060913]/85 rounded px-1 leading-none shadow-sm z-10 ${
-                          chem.penalty > 0 ? "text-orange-400" : "text-[#10b981]"
-                        }`}>
-                          {chem.rating}
+                        <span className="absolute top-1 left-1.5 text-[10px] font-black bg-[#060913]/85 rounded px-1 leading-none shadow-sm z-10 text-[#10b981]">
+                          {slot.player.rating}
                         </span>
                         {/* Position Badge */}
-                        <span className="absolute bottom-1 right-1 text-[8px] font-bold text-gray-400 bg-[#060913]/85 rounded px-1 leading-none uppercase z-10">
-                          {slot.player.position}
+                        <span className="absolute bottom-1 right-1 text-[8px] font-bold text-gray-300 bg-[#060913]/85 rounded px-1 leading-none uppercase z-10">
+                          {slot.title}
                         </span>
                         {slot.player.face_url ? (
                           <img
                             src={slot.player.face_url}
                             alt={slot.player.name}
                             className="h-full w-full object-cover scale-110"
+                            draggable={false}
                           />
                         ) : (
                           <span className="text-xl">👤</span>
                         )}
                       </div>
-                      
-                      {chem.penalty > 0 && (
-                        <span className="absolute -top-2.5 right-0 text-[8px] font-bold bg-orange-500/10 border border-orange-500/20 text-orange-400 px-1 rounded shadow animate-pulse">
-                          -{chem.penalty}
-                        </span>
-                      )}
 
                       {/* Nome do Jogador */}
-                      <span className="mt-1 text-[10px] font-bold text-white bg-[#060913]/95 border border-white/5 rounded px-1.5 py-0.5 truncate max-w-[80px] shadow text-center leading-none">
+                      <span className="mt-1 text-[10px] font-bold text-white bg-[#060913]/95 border border-white/10 rounded px-1.5 py-0.5 truncate max-w-[80px] shadow text-center leading-none">
                         {slot.player.name.split(" ").slice(-1)[0]}
                       </span>
                     </div>
                   ) : (
                     /* Slot Vazio */
-                    <div className="flex flex-col items-center opacity-45 hover:opacity-85 transition-opacity">
-                      <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-xl bg-white/5 border border-dashed border-white/20 flex items-center justify-center">
-                        <span className="text-[10px] font-bold text-gray-400">{slot.title}</span>
+                    <div
+                      className={`flex flex-col items-center transition-all duration-200 ${
+                        isDraggingActive
+                          ? isHovered
+                            ? "opacity-100 scale-110"
+                            : "opacity-70"
+                          : "opacity-45 hover:opacity-75"
+                      }`}
+                    >
+                      <div
+                        className={`h-14 w-14 sm:h-16 sm:w-16 rounded-xl flex flex-col items-center justify-center transition-all duration-200 ${
+                          isHovered
+                            ? "bg-[#10b981]/20 border-2 border-[#10b981] shadow-[0_0_12px_#10b981aa] animate-pulse"
+                            : "bg-white/5 border border-dashed border-white/25"
+                        }`}
+                      >
+                        <span className="text-[10px] font-bold text-gray-300">{slot.title}</span>
+                        {isDraggingActive && !isHovered && (
+                          <span className="text-[7px] text-gray-500 mt-0.5">SOLTAR</span>
+                        )}
+                        {isHovered && (
+                          <span className="text-[7px] text-[#10b981] font-bold mt-0.5">
+                            AQUI ✓
+                          </span>
+                        )}
                       </div>
-                      <span className="mt-1 text-[9px] text-gray-500 font-semibold uppercase">Escalar</span>
                     </div>
                   )}
                 </div>
@@ -674,46 +1007,64 @@ export default function UserDashboard() {
 
         {/* Banco de Reservas */}
         {players.length > 0 && (
-          <div className="border-t border-white/5 pt-6 space-y-4">
-            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">
-              Banco de Reservas ({benchPlayers.length})
-            </h3>
+          <div className="border-t border-white/5 pt-6 space-y-3">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">
+                Banco de Reservas ({benchPlayers.length})
+              </h3>
+              {draggingPlayer && (
+                <span className="text-[10px] text-[#10b981] animate-pulse">
+                  ← Arraste para um slot do campo
+                </span>
+              )}
+            </div>
             {benchPlayers.length === 0 ? (
-              <p className="text-xs text-gray-500">Todos os jogadores estão escalados no time titular.</p>
+              <p className="text-xs text-gray-500">
+                Todos os jogadores estão escalados no time titular.
+              </p>
             ) : (
-              <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+              <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                 {benchPlayers.map((player) => (
                   <div
                     key={player.id}
-                    className="glass-card flex-shrink-0 w-24 p-3 rounded-xl border border-white/5 flex flex-col items-center justify-between text-center bg-[#090d16]/30 relative"
+                    draggable
+                    onDragStart={(e) => {
+                      setDraggingPlayer(player);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    onDragEnd={() => {
+                      setDraggingPlayer(null);
+                      setDragOverSlot(null);
+                    }}
+                    title={`${player.name} — Arraste para escalar`}
+                    className={`glass-card flex-shrink-0 w-20 p-2.5 rounded-xl border border-white/5 flex flex-col items-center justify-between text-center bg-[#090d16]/30 relative cursor-grab active:cursor-grabbing transition-all hover:border-[#10b981]/30 hover:bg-white/5 ${
+                      draggingPlayer?.id === player.id ? "opacity-40" : "opacity-100"
+                    }`}
                   >
-                    <span className="absolute top-1.5 left-1.5 text-[9px] font-extrabold text-[#10b981] bg-white/5 px-1 rounded leading-none">
+                    <span className="absolute top-1.5 left-1.5 text-[9px] font-extrabold text-[#10b981] bg-[#060913]/80 px-1 rounded leading-none">
                       {player.rating}
                     </span>
-                    <span className="absolute top-1.5 right-1.5 text-[8px] font-bold text-gray-400 uppercase">
+                    <span className="absolute top-1.5 right-1.5 text-[7px] font-bold text-gray-400 uppercase bg-[#060913]/80 px-1 rounded leading-none">
                       {player.position}
                     </span>
-                    
-                    <div className="h-10 w-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden mb-2 mt-2">
+
+                    <div className="h-11 w-11 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden mt-3 mb-1">
                       {player.face_url ? (
-                        <img src={player.face_url} alt="" className="h-full w-full object-cover scale-110" />
+                        <img
+                          src={player.face_url}
+                          alt=""
+                          className="h-full w-full object-cover scale-110"
+                          draggable={false}
+                        />
                       ) : (
                         <span className="text-lg">👤</span>
                       )}
                     </div>
-                    
-                    <p className="text-[10px] font-bold text-white truncate w-full mb-1">
+
+                    <p className="text-[9px] font-bold text-white truncate w-full text-center leading-tight">
                       {player.name.split(" ").slice(-1)[0]}
                     </p>
-                    
-                    <button
-                      onClick={() => {
-                        alert("Clique em um slot do campo para substituir ou escalar este jogador!");
-                      }}
-                      className="w-full rounded bg-[#3b82f6]/10 hover:bg-[#3b82f6]/20 border border-[#3b82f6]/20 py-1 text-[8px] font-bold text-[#3b82f6] transition-all"
-                    >
-                      Escalar
-                    </button>
+                    <p className="text-[7px] text-gray-500 mt-0.5">arrastar ↑</p>
                   </div>
                 ))}
               </div>
@@ -726,13 +1077,17 @@ export default function UserDashboard() {
       <div className="glass-panel p-6 sm:p-8 rounded-2xl border border-white/5 bg-[#090d16]/75 space-y-6">
         <div className="border-b border-white/5 pb-4">
           <h2 className="text-lg font-bold text-white">Elenco do Clube</h2>
-          <p className="text-xs text-gray-400">Jogadores organizados por setor tático.</p>
+          <p className="text-xs text-gray-400">
+            Jogadores organizados por setor tático. Arraste para o campo para escalar.
+          </p>
         </div>
 
         {players.length === 0 ? (
           <div className="py-16 text-center">
-            <span className="text-4xl block mb-2">跑‍♂️</span>
-            <p className="text-sm text-gray-400 mb-4">Seu elenco está vazio. Comece a contratar atletas livres!</p>
+            <span className="text-4xl block mb-2">🏃‍♂️</span>
+            <p className="text-sm text-gray-400 mb-4">
+              Seu elenco está vazio. Comece a contratar atletas livres!
+            </p>
             <Link
               href="/dashboard/scouting"
               className="rounded-lg bg-[#10b981] hover:bg-[#059669] px-4 py-2 text-xs font-semibold text-white transition-all"
@@ -751,89 +1106,241 @@ export default function UserDashboard() {
         )}
       </div>
 
-      {/* Modal de Escalação / Substituição (Fase 3) */}
-      {showEscalationModal && selectedSlotIndex !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="glass-panel w-full max-w-md max-h-[500px] flex flex-col justify-between p-6 rounded-2xl border border-white/10 bg-[#090d16]/95 shadow-2xl text-left">
-            <div className="border-b border-white/5 pb-3 flex justify-between items-center">
+      {/* Modal de Ajuste Salarial */}
+      {showSalaryModal && selectedPlayerForSalary && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm p-4">
+          <div className="glass-panel w-full max-w-sm p-6 rounded-2xl border border-white/10 bg-[#090d16]/95 shadow-2xl">
+            <div className="flex items-center justify-between mb-5">
               <div>
-                <h3 className="text-sm font-bold text-white">Escalar Jogador</h3>
-                <p className="text-[10px] text-gray-400">Escolha um jogador para a posição de {fieldPlayers[selectedSlotIndex]?.title}</p>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  💰 Ajustar Salário
+                </h3>
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  Digite o salário que o jogador terá.
+                </p>
               </div>
               <button
                 onClick={() => {
-                  setShowEscalationModal(false);
-                  setSelectedSlotIndex(null);
+                  setShowSalaryModal(false);
+                  setSalaryError("");
+                  setSalarySuccess("");
                 }}
                 className="text-gray-400 hover:text-white text-xs bg-white/5 px-2.5 py-1 rounded-lg"
               >
-                Fechar
+                ✕
               </button>
             </div>
 
-            {/* Listagem de jogadores do elenco */}
-            <div className="flex-1 overflow-y-auto py-4 space-y-2 pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-              {fieldPlayers[selectedSlotIndex]?.player && (
-                <button
-                  onClick={() => handleRemovePlayerFromSlot(selectedSlotIndex)}
-                  className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 text-xs font-bold text-red-400 transition-all mb-2"
-                >
-                  ❌ Remover da Posição (Mandar pro Banco)
-                </button>
-              )}
+            {!salaryWindowOpen && (
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-400 mb-4 flex items-start gap-2">
+                <span className="text-sm">🔒</span>
+                <div>
+                  <strong className="block font-bold">Janela de Ajuste Fechada</strong>
+                  O período para os times ajustarem salários de forma livre está encerrado. Consulte o administrador.
+                </div>
+              </div>
+            )}
 
-              {players.length === 0 ? (
-                <p className="text-xs text-gray-500 text-center py-4">Nenhum jogador disponível no elenco.</p>
-              ) : (
-                players.map((p) => {
-                  const isAlreadyStarters = fieldPlayers.some(s => s.player?.id === p.id);
-                  const chem = getAdjustedRating(p, fieldPlayers[selectedSlotIndex]?.title);
-                  
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => handleSelectPlayerForSlot(p)}
-                      className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all text-left ${
-                        isAlreadyStarters
-                          ? "bg-[#3b82f6]/5 border-[#3b82f6]/20 hover:bg-[#3b82f6]/10"
-                          : "bg-white/5 border-white/5 hover:bg-white/10"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0">
-                          {p.face_url ? (
-                            <img src={p.face_url} alt="" className="h-full w-full object-cover scale-110" />
-                          ) : (
-                            <span className="text-lg">👤</span>
-                          )}
-                        </div>
-                        <div>
-                          <p className="font-bold text-xs text-white flex items-center gap-1.5">
-                            {p.name}
-                            {isAlreadyStarters && (
-                              <span className="text-[8px] bg-[#3b82f6]/20 text-[#3b82f6] px-1 rounded uppercase font-bold">Titular</span>
-                            )}
-                          </p>
-                          <p className="text-[10px] text-gray-400">
-                            Nat: <strong className="text-white">{p.position}</strong> • Over: <strong className="text-white">{p.rating}</strong>
-                          </p>
-                        </div>
-                      </div>
+            {/* Info do Jogador */}
+            <div className="flex items-center gap-3 mb-4 p-3 rounded-xl bg-white/5 border border-white/5">
+              <div className="h-12 w-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+                {selectedPlayerForSalary.face_url ? (
+                  <img
+                    src={selectedPlayerForSalary.face_url}
+                    alt=""
+                    className="h-full w-full object-cover scale-110"
+                  />
+                ) : (
+                  <span className="text-xl">👤</span>
+                )}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-black text-[#10b981]">
+                    {selectedPlayerForSalary.rating}
+                  </span>
+                  <span className="text-xs font-bold text-white">
+                    {selectedPlayerForSalary.name}
+                  </span>
+                </div>
+                <span className="text-[9px] text-gray-400 uppercase">
+                  {selectedPlayerForSalary.position}
+                </span>
+              </div>
+            </div>
 
-                      <div className="text-right">
-                        <span className={`text-xs font-black block ${
-                          chem.penalty > 0 ? "text-orange-400" : "text-[#10b981]"
-                        }`}>
-                          Rating {chem.rating}
-                        </span>
-                        {chem.penalty > 0 && (
-                          <span className="text-[8.5px] text-orange-400">Fora de Posição (-{chem.penalty})</span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })
-              )}
+            {/* Tabela de Dados */}
+            <div className="divide-y divide-white/5 rounded-xl overflow-hidden border border-white/5 mb-4">
+              <div className="flex justify-between items-center px-4 py-2.5 bg-white/[0.02]">
+                <span className="text-[10px] text-gray-400">Dono</span>
+                <span className="text-[10px] font-semibold text-white">{team.name}</span>
+              </div>
+              <div className="flex justify-between items-center px-4 py-2.5">
+                <span className="text-[10px] text-gray-400">Salário Atual</span>
+                <span className="text-[10px] font-semibold text-emerald-400">
+                  R$ {selectedPlayerForSalary.wage.toLocaleString("pt-BR")}
+                </span>
+              </div>
+              <div className="flex justify-between items-center px-4 py-2.5 bg-white/[0.02]">
+                <span className="text-[10px] text-gray-400">Passe Atual</span>
+                <span className="text-[10px] font-semibold text-blue-400">
+                  R${" "}
+                  {parseFloat(selectedPlayerForSalary.value).toLocaleString("pt-BR", {
+                    minimumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
+            </div>
+
+            {/* Inputs */}
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="text-[10px] font-semibold text-gray-400 block mb-1">
+                  Novo Salário (R$)
+                </label>
+                <input
+                  type="number"
+                  value={newSalary}
+                  onChange={(e) => setNewSalary(e.target.value)}
+                  placeholder={salaryWindowOpen ? "Ex: 50000" : "Ajuste desativado"}
+                  disabled={!salaryWindowOpen || savingSalary}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#10b981] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                />
+              </div>
+              <div className="flex justify-between items-center px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/5">
+                <span className="text-[10px] text-gray-400">
+                  Novo Passe{" "}
+                  <span className="text-gray-600">(× {salaryRatio})</span>
+                </span>
+                <span className="text-[10px] font-semibold text-blue-400">
+                  R$ {calculatedValue}
+                </span>
+              </div>
+              <p className="text-[9px] text-gray-500">
+                O passe é calculado automaticamente pelo ratio definido pelo ADM.
+              </p>
+            </div>
+
+            {salaryError && (
+              <p className="text-[10px] text-red-400 mb-3 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                ⚠️ {salaryError}
+              </p>
+            )}
+            {salarySuccess && (
+              <p className="text-[10px] text-emerald-400 mb-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+                ✅ {salarySuccess}
+              </p>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowSalaryModal(false);
+                  setSalaryError("");
+                  setSalarySuccess("");
+                }}
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 py-2.5 text-xs font-bold text-gray-300 transition-all"
+              >
+                Fechar
+              </button>
+              <button
+                onClick={handleSalaryAdjust}
+                disabled={savingSalary || !newSalary || !salaryWindowOpen}
+                className="flex-1 rounded-xl bg-[#10b981] hover:bg-[#059669] disabled:opacity-50 disabled:cursor-not-allowed py-2.5 text-xs font-bold text-white transition-all"
+              >
+                {savingSalary ? "Ajustando..." : "Ajustar Salário"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Leilão */}
+      {showAuctionModal && selectedPlayerForAuction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm p-4">
+          <div className="glass-panel w-full max-w-sm p-6 rounded-2xl border border-white/10 bg-[#090d16]/95 shadow-2xl">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                🔨 Enviar para Leilão
+              </h3>
+              <button
+                onClick={() => {
+                  setShowAuctionModal(false);
+                  setAuctionError("");
+                  setAuctionSuccess("");
+                }}
+                className="text-gray-400 hover:text-white text-xs bg-white/5 px-2.5 py-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Info do Jogador */}
+            <div className="flex items-center gap-3 mb-5 p-3 rounded-xl bg-amber-500/5 border border-amber-500/10">
+              <div className="h-12 w-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+                {selectedPlayerForAuction.face_url ? (
+                  <img
+                    src={selectedPlayerForAuction.face_url}
+                    alt=""
+                    className="h-full w-full object-cover scale-110"
+                  />
+                ) : (
+                  <span className="text-xl">👤</span>
+                )}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-black text-amber-400">
+                    {selectedPlayerForAuction.rating}
+                  </span>
+                  <span className="text-xs font-bold text-white">
+                    {selectedPlayerForAuction.name}
+                  </span>
+                </div>
+                <span className="text-[9px] text-gray-400 uppercase">
+                  {selectedPlayerForAuction.position}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-300 mb-3">
+              Tem certeza que deseja colocar{" "}
+              <strong className="text-white">{selectedPlayerForAuction.name}</strong> em leilão?
+            </p>
+            <p className="text-[10px] text-gray-500 mb-5 p-3 bg-white/[0.02] rounded-xl border border-white/5">
+              ℹ️ O jogador só estará pronto para receber lances quando o administrador liberar a
+              temporada de leilão.
+            </p>
+
+            {auctionError && (
+              <p className="text-[10px] text-red-400 mb-3 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                ⚠️ {auctionError}
+              </p>
+            )}
+            {auctionSuccess && (
+              <p className="text-[10px] text-emerald-400 mb-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+                ✅ {auctionSuccess}
+              </p>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowAuctionModal(false);
+                  setAuctionError("");
+                  setAuctionSuccess("");
+                }}
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 py-2.5 text-xs font-bold text-gray-300 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSubmitAuction}
+                disabled={savingAuction}
+                className="flex-1 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed py-2.5 text-xs font-bold text-white transition-all"
+              >
+                {savingAuction ? "Enviando..." : "SIM, enviar"}
+              </button>
             </div>
           </div>
         </div>

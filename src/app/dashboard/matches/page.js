@@ -193,6 +193,18 @@ export default function MatchesPage() {
         if (eventsError) throw eventsError;
       }
 
+      // Notificar o adversário
+      const isHome = reportingMatch.home_team_id === myTeam.id;
+      const opponentUserId = isHome ? reportingMatch.away_team?.user_id : reportingMatch.home_team?.user_id;
+
+      if (opponentUserId) {
+        await supabase.from("notifications").insert({
+          user_id: opponentUserId,
+          title: "Resultado de Confronto Reportado ⚽",
+          content: `O time ${myTeam.name} reportou o placar da Rodada ${reportingMatch.round_number} (${homeScore} x ${awayScore}). Por favor, acesse Confrontos para validar o resultado.`
+        });
+      }
+
       triggerAlert("success", "Placar reportado! Aguardando confirmação do adversário.");
       setReportingMatch(null);
       loadData();
@@ -206,11 +218,21 @@ export default function MatchesPage() {
     const confirm = window.confirm("Deseja confirmar este resultado? Isso atualizará a classificação oficial da liga.");
     if (!confirm) return;
 
+    const matchObj = matches.find(m => m.id === matchId);
+
     const { data, error } = await supabase.rpc("confirm_match", { p_match_id: matchId });
 
     if (error || (data && !data.success)) {
       triggerAlert("error", "Erro ao confirmar partida: " + (error?.message || data?.message));
     } else {
+      // Notificar o outro usuário que reportou
+      if (matchObj && matchObj.reported_by) {
+        await supabase.from("notifications").insert({
+          user_id: matchObj.reported_by,
+          title: "Resultado de Confronto Confirmado ✅",
+          content: `O time ${myTeam.name} confirmou o resultado do jogo da Rodada ${matchObj.round_number}. A partida foi homologada.`
+        });
+      }
       triggerAlert("success", "Partida homologada com sucesso!");
       loadData();
     }
@@ -234,6 +256,14 @@ export default function MatchesPage() {
     if (error || (data && !data.success)) {
       triggerAlert("error", "Erro ao abrir disputa: " + (error?.message || data?.message));
     } else {
+      // Notificar o outro usuário de que o placar foi contestado
+      if (disputingMatch.reported_by) {
+        await supabase.from("notifications").insert({
+          user_id: disputingMatch.reported_by,
+          title: "Resultado Contestado ⚠️",
+          content: `O time ${myTeam.name} contestou o resultado reportado da Rodada ${disputingMatch.round_number}. O jogo foi para arbitragem.`
+        });
+      }
       triggerAlert("success", "Disputa registrada. O administrador irá analisar as provas.");
       setDisputingMatch(null);
       setDisputeReason("");

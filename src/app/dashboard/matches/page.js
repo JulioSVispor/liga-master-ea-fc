@@ -854,6 +854,7 @@ export default function MatchesPage() {
             const opponentTeam = isHome ? match.away_team : match.home_team;
             const waitingMyHandshake = match.status === "pending" && match.reported_by && match.reported_by !== userProfile?.id;
             const waitingOppHandshake = match.status === "pending" && match.reported_by && match.reported_by === userProfile?.id;
+            const isMatchLocked = match.released === false && match.status !== "confirmed";
 
             return (
               <div
@@ -862,13 +863,18 @@ export default function MatchesPage() {
               >
                 {/* Info do Confronto */}
                 <div className="space-y-2 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] font-bold text-gray-400 bg-white/5 px-2.5 py-0.5 rounded border border-white/5">
                       Rodada {match.round_number}
                     </span>
                     <span className="text-[10px] font-bold text-[#10b981] bg-[#10b981]/15 px-2.5 py-0.5 rounded border border-[#10b981]/20">
                       {match.seasons?.name} - {match.cup_name || match.leagues?.name || "Copa"}
                     </span>
+                    {isMatchLocked && (
+                      <span className="text-[10px] font-bold text-red-400 bg-red-500/10 px-2.5 py-0.5 rounded border border-red-500/20">
+                        🔒 Bloqueada pelo Admin
+                      </span>
+                    )}
                     {match.status === "dispute" && (
                       <span className="text-[10px] font-bold text-red-400 bg-red-500/10 px-2.5 py-0.5 rounded border border-red-500/20">
                         Sob Dispute / Análise do Admin
@@ -911,46 +917,54 @@ export default function MatchesPage() {
 
                 {/* Ações */}
                 <div className="flex gap-3 flex-shrink-0 w-full md:w-auto">
-                  {/* Próximos Jogos: Reportar */}
-                  {activeTab === "next" && (
-                    <button
-                      onClick={() => openReportForm(match)}
-                      className="w-full md:w-auto px-5 py-2.5 rounded-xl text-xs font-bold bg-[#10b981] text-white hover:bg-emerald-600 shadow-lg shadow-[#10b981]/15 transition-all"
-                    >
-                      Reportar Placar
-                    </button>
-                  )}
+                  {isMatchLocked ? (
+                    <span className="text-xs font-semibold text-gray-400 bg-white/5 px-4 py-2.5 rounded-xl border border-white/5 flex items-center gap-1.5">
+                      🔒 Rodada Bloqueada
+                    </span>
+                  ) : (
+                    <>
+                      {/* Próximos Jogos: Reportar */}
+                      {activeTab === "next" && (
+                        <button
+                          onClick={() => openReportForm(match)}
+                          className="w-full md:w-auto px-5 py-2.5 rounded-xl text-xs font-bold bg-[#10b981] text-white hover:bg-emerald-600 shadow-lg shadow-[#10b981]/15 transition-all"
+                        >
+                          Reportar Placar
+                        </button>
+                      )}
 
-                  {/* Validação: Handshake Pendente */}
-                  {activeTab === "handshake" && waitingMyHandshake && (
-                    <div className="flex gap-2 w-full md:w-auto">
-                      <button
-                        onClick={() => handleConfirmMatch(match.id)}
-                        className="flex-1 md:flex-none px-4 py-2.5 rounded-xl text-xs font-bold bg-[#10b981] text-white hover:bg-emerald-600 transition-all"
-                      >
-                        Confirmar Placar
-                      </button>
-                      <button
-                        onClick={() => setDisputingMatch(match)}
-                        className="flex-1 md:flex-none px-4 py-2.5 rounded-xl text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white transition-all"
-                      >
-                        Contestar
-                      </button>
-                    </div>
-                  )}
+                      {/* Validação: Handshake Pendente */}
+                      {activeTab === "handshake" && waitingMyHandshake && (
+                        <div className="flex gap-2 w-full md:w-auto">
+                          <button
+                            onClick={() => handleConfirmMatch(match.id)}
+                            className="flex-1 md:flex-none px-4 py-2.5 rounded-xl text-xs font-bold bg-[#10b981] text-white hover:bg-emerald-600 transition-all"
+                          >
+                            Confirmar Placar
+                          </button>
+                          <button
+                            onClick={() => setDisputingMatch(match)}
+                            className="flex-1 md:flex-none px-4 py-2.5 rounded-xl text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white transition-all"
+                          >
+                            Contestar
+                          </button>
+                        </div>
+                      )}
 
-                  {activeTab === "handshake" && waitingOppHandshake && (
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className="text-xs font-medium text-amber-400 bg-amber-400/10 border border-amber-400/20 px-4 py-2.5 rounded-xl">
-                        🕒 Aguardando validação do adversário
-                      </span>
-                      <button
-                        onClick={() => openReportForm(match)}
-                        className="px-4 py-2 rounded-xl text-xs font-bold bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20 hover:bg-[#3b82f6]/20 transition-all active:scale-[0.98] flex items-center gap-1.5"
-                      >
-                        📝 Editar Reporte
-                      </button>
-                    </div>
+                      {activeTab === "handshake" && waitingOppHandshake && (
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="text-xs font-medium text-amber-400 bg-amber-400/10 border border-amber-400/20 px-4 py-2.5 rounded-xl">
+                            🕒 Aguardando validação do adversário
+                          </span>
+                          <button
+                            onClick={() => openReportForm(match)}
+                            className="px-4 py-2 rounded-xl text-xs font-bold bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20 hover:bg-[#3b82f6]/20 transition-all active:scale-[0.98] flex items-center gap-1.5"
+                          >
+                            📝 Editar Reporte
+                          </button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

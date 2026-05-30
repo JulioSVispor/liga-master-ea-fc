@@ -47,6 +47,7 @@ export default function AdminLayout({ children }) {
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [adminName, setAdminName] = useState("");
+  const [adminRole, setAdminRole] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -61,12 +62,13 @@ export default function AdminLayout({ children }) {
           .eq("id", session.user.id)
           .single();
 
-        if (error || !profile || profile.role !== "admin") {
+        if (error || !profile || (profile.role !== "admin" && profile.role !== "master")) {
           router.push("/dashboard");
           return;
         }
 
         setAdminName(profile.display_name || "Administrador");
+        setAdminRole(profile.role || "admin");
         setAuthorized(true);
       } catch {
         router.push("/dashboard");
@@ -116,7 +118,9 @@ export default function AdminLayout({ children }) {
           </div>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-white leading-none truncate">{adminName}</p>
-            <span className="text-[10px] font-medium text-emerald-400 uppercase tracking-wider">Super Admin</span>
+            <span className="text-[10px] font-medium text-emerald-400 uppercase tracking-wider">
+              {adminRole === "master" ? "Dono da Liga" : "Super Admin"}
+            </span>
           </div>
         </div>
 

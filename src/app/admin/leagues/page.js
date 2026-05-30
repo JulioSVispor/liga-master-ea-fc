@@ -324,6 +324,7 @@ export default function AdminLeaguesPage() {
             away_team_id: r % 2 === 0 ? away.id : home.id,
             round_number: r + 1,
             status: "pending",
+            released: false,
           });
         }
       }
@@ -338,6 +339,7 @@ export default function AdminLeaguesPage() {
         home_team_id: f.away_team_id,
         away_team_id: f.home_team_id,
         round_number: f.round_number + rounds,
+        released: false,
       }));
       fixtures.push(...returnFixtures);
     }
@@ -380,7 +382,8 @@ export default function AdminLeaguesPage() {
           home_team_id: shuffledTeams[i],
           away_team_id: shuffledTeams[i+1],
           round_number: startRound,
-          status: "pending"
+          status: "pending",
+          released: false
         });
       }
 
@@ -431,7 +434,8 @@ export default function AdminLeaguesPage() {
           home_team_id: shuffledWinners[i],
           away_team_id: shuffledWinners[i+1],
           round_number: currentPhase + 1,
-          status: "pending"
+          status: "pending",
+          released: false
         });
       }
 
@@ -442,6 +446,29 @@ export default function AdminLeaguesPage() {
       loadCupMatches(selectedCup, selectedSeason.id);
     } catch (err) {
       triggerAlert("error", "Erro ao gerar próxima fase: " + err.message);
+    }
+  };
+
+  const handleToggleRoundRelease = async (roundNumber, currentReleasedStatus, isLeague) => {
+    try {
+      let query = supabase.from("matches").update({ released: !currentReleasedStatus });
+      if (isLeague) {
+        query = query.eq("league_id", selectedLeague.id).eq("round_number", parseInt(roundNumber));
+      } else {
+        query = query.eq("cup_name", selectedCup).eq("season_id", selectedSeason.id).eq("round_number", parseInt(roundNumber));
+      }
+      
+      const { error } = await query;
+      if (error) throw error;
+      
+      triggerAlert("success", `Rodada ${roundNumber} ${!currentReleasedStatus ? "liberada" : "bloqueada"} com sucesso!`);
+      if (isLeague) {
+        loadLeagueMatches(selectedLeague.id);
+      } else {
+        loadCupMatches(selectedCup, selectedSeason.id);
+      }
+    } catch (err) {
+      triggerAlert("error", "Erro ao alterar status da rodada: " + err.message);
     }
   };
 
@@ -711,39 +738,63 @@ export default function AdminLeaguesPage() {
                         groups[round].push(match);
                         return groups;
                       }, {})
-                    ).map(([round, matches]) => (
-                      <div key={round} className="space-y-2">
-                        <h3 className="text-xs font-bold text-gray-400 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5">
-                          RODADA {round}
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {matches.map((m) => (
-                            <div
-                              key={m.id}
-                              className="p-3.5 rounded-xl bg-[#0d1527]/50 border border-white/5 flex justify-between items-center gap-3"
-                            >
-                              <div className="flex-1 text-right truncate font-medium text-sm text-gray-200">
-                                {m.home_team?.name}
-                              </div>
-                              <div className="flex items-center gap-2 bg-[#060913] border border-white/10 px-3 py-1 rounded-lg text-xs font-bold min-w-[70px] justify-center text-emerald-400 shadow-inner">
-                                {m.status === "confirmed" ? (
-                                  <span>
-                                    {m.home_score} - {m.away_score}
-                                  </span>
-                                ) : m.status === "dispute" ? (
-                                  <span className="text-red-400 animate-pulse">DISPUTA</span>
-                                ) : (
-                                  <span className="text-gray-400 text-[10px] uppercase">PENDENTE</span>
-                                )}
-                              </div>
-                              <div className="flex-1 text-left truncate font-medium text-sm text-gray-200">
-                                {m.away_team?.name}
-                              </div>
+                    ).map(([round, matches]) => {
+                      const isRoundReleased = matches.every(m => m.released);
+                      return (
+                        <div key={round} className="space-y-2">
+                          <div className="flex justify-between items-center bg-[#0d1527]/80 px-3 py-2 rounded-lg border border-white/5">
+                            <h3 className="text-xs font-bold text-gray-400">
+                              RODADA {round}
+                            </h3>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                isRoundReleased 
+                                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+                                  : "bg-red-500/10 text-red-400 border-red-500/20"
+                              }`}>
+                                {isRoundReleased ? "🔓 Liberada" : "🔒 Bloqueada"}
+                              </span>
+                              <button
+                                onClick={() => handleToggleRoundRelease(round, isRoundReleased, true)}
+                                className={`text-[10px] font-semibold px-2 py-0.5 rounded-lg border transition-all ${
+                                  isRoundReleased
+                                    ? "bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/30"
+                                    : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                                }`}
+                              >
+                                {isRoundReleased ? "Bloquear" : "Liberar"}
+                              </button>
                             </div>
-                          ))}
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {matches.map((m) => (
+                              <div
+                                key={m.id}
+                                className="p-3.5 rounded-xl bg-[#0d1527]/50 border border-white/5 flex justify-between items-center gap-3"
+                              >
+                                <div className="flex-1 text-right truncate font-medium text-sm text-gray-200">
+                                  {m.home_team?.name}
+                                </div>
+                                <div className="flex items-center gap-2 bg-[#060913] border border-white/10 px-3 py-1 rounded-lg text-xs font-bold min-w-[70px] justify-center text-emerald-400 shadow-inner">
+                                  {m.status === "confirmed" ? (
+                                    <span>
+                                      {m.home_score} - {m.away_score}
+                                    </span>
+                                  ) : m.status === "dispute" ? (
+                                    <span className="text-red-400 animate-pulse">DISPUTA</span>
+                                  ) : (
+                                    <span className="text-gray-400 text-[10px] uppercase">PENDENTE</span>
+                                  )}
+                                </div>
+                                <div className="flex-1 text-left truncate font-medium text-sm text-gray-200">
+                                  {m.away_team?.name}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {activeMatches.length === 0 && (
                       <div className="py-12 text-center text-gray-500 text-sm border border-dashed border-white/5 rounded-xl">
                         Nenhum jogo gerado ainda para esta liga. Clique em "Gerar Tabela de Jogos".
@@ -881,212 +932,286 @@ export default function AdminLeaguesPage() {
               <div className="overflow-x-auto pb-4 pt-2">
                 <div className="flex flex-row justify-center items-center gap-12 min-w-[800px] py-4">
                   {/* Quartas de Final */}
-                  {cupMatches.some(m => m.round_number === 1) && (
-                    <div className="flex flex-col justify-between gap-6 h-[520px] w-[260px]">
-                      <div className="text-center text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-white/5 pb-2 flex flex-col items-center gap-2">
-                        <span>Quartas de Final</span>
-                        {cupMatches.filter(m => m.round_number === 1).every(m => m.status === "confirmed") && (
-                          <button
-                            onClick={() => handleGenerateNextCupPhase(1)}
-                            className="px-3 py-1 rounded-lg text-[9px] font-bold bg-[#10b981] hover:bg-emerald-600 text-white transition-all shadow"
-                          >
-                            🎲 Sortear Semifinais
-                          </button>
-                        )}
-                      </div>
-                      <div className="flex flex-col justify-between h-full py-4 gap-4">
-                        {cupMatches.filter(m => m.round_number === 1).map((m) => {
-                          const isHomeWinner = m.status === "confirmed" && m.home_score > m.away_score;
-                          const isAwayWinner = m.status === "confirmed" && m.away_score > m.home_score;
-                          return (
-                            <div
-                              key={m.id}
-                              className="p-3 rounded-xl bg-[#0b0f19] border border-white/5 hover:border-[#10b981]/30 transition-all flex flex-col gap-2 relative overflow-hidden shadow-lg shadow-black/20"
+                  {cupMatches.some(m => m.round_number === 1) && (() => {
+                    const phaseMatches = cupMatches.filter(m => m.round_number === 1);
+                    const isPhaseReleased = phaseMatches.every(m => m.released);
+                    return (
+                      <div className="flex flex-col justify-between gap-6 h-[520px] w-[260px]">
+                        <div className="text-center text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-white/5 pb-2 flex flex-col items-center gap-2">
+                          <span>Quartas de Final</span>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
+                              isPhaseReleased 
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+                                : "bg-red-500/10 text-red-400 border-red-500/20"
+                            }`}>
+                              {isPhaseReleased ? "🔓 Liberada" : "🔒 Bloqueada"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleRoundRelease(1, isPhaseReleased, false)}
+                              className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-lg border transition-all ${
+                                isPhaseReleased
+                                  ? "bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/30"
+                                  : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                              }`}
                             >
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 truncate">
-                                  {m.home_team?.badge_url ? (
-                                    <img src={m.home_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                              {isPhaseReleased ? "Bloquear" : "Liberar"}
+                            </button>
+                          </div>
+                          {phaseMatches.every(m => m.status === "confirmed") && (
+                            <button
+                              type="button"
+                              onClick={() => handleGenerateNextCupPhase(1)}
+                              className="px-3 py-1 rounded-lg text-[9px] font-bold bg-[#10b981] hover:bg-emerald-600 text-white transition-all shadow"
+                            >
+                              🎲 Sortear Semifinais
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex flex-col justify-between h-full py-4 gap-4">
+                          {phaseMatches.map((m) => {
+                            const isHomeWinner = m.status === "confirmed" && m.home_score > m.away_score;
+                            const isAwayWinner = m.status === "confirmed" && m.away_score > m.home_score;
+                            return (
+                              <div
+                                key={m.id}
+                                className="p-3 rounded-xl bg-[#0b0f19] border border-white/5 hover:border-[#10b981]/30 transition-all flex flex-col gap-2 relative overflow-hidden shadow-lg shadow-black/20"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 truncate">
+                                    {m.home_team?.badge_url ? (
+                                      <img src={m.home_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                    ) : (
+                                      <span className="text-xs">🛡️</span>
+                                    )}
+                                    <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isHomeWinner ? "text-gray-500" : "text-gray-200"}`}>
+                                      {m.home_team?.name || "A definir"}
+                                    </span>
+                                  </div>
+                                  {m.status === "confirmed" ? (
+                                    <span className={`text-xs font-extrabold ${isHomeWinner ? "text-emerald-400" : "text-gray-500"}`}>
+                                      {m.home_score}
+                                    </span>
                                   ) : (
-                                    <span className="text-xs">🛡️</span>
+                                    <span className="text-[10px] text-gray-600 font-bold">-</span>
                                   )}
-                                  <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isHomeWinner ? "text-gray-500" : "text-gray-200"}`}>
-                                    {m.home_team?.name || "A definir"}
-                                  </span>
                                 </div>
-                                {m.status === "confirmed" ? (
-                                  <span className={`text-xs font-extrabold ${isHomeWinner ? "text-emerald-400" : "text-gray-500"}`}>
-                                    {m.home_score}
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] text-gray-600 font-bold">-</span>
-                                )}
-                              </div>
-                              <div className="border-t border-white/5 my-0.5"></div>
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 truncate">
-                                  {m.away_team?.badge_url ? (
-                                    <img src={m.away_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                <div className="border-t border-white/5 my-0.5"></div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 truncate">
+                                    {m.away_team?.badge_url ? (
+                                      <img src={m.away_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                    ) : (
+                                      <span className="text-xs">🛡️</span>
+                                    )}
+                                    <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isAwayWinner ? "text-gray-500" : "text-gray-200"}`}>
+                                      {m.away_team?.name || "A definir"}
+                                    </span>
+                                  </div>
+                                  {m.status === "confirmed" ? (
+                                    <span className={`text-xs font-extrabold ${isAwayWinner ? "text-emerald-400" : "text-gray-500"}`}>
+                                      {m.away_score}
+                                    </span>
                                   ) : (
-                                    <span className="text-xs">🛡️</span>
+                                    <span className="text-[10px] text-gray-600 font-bold">-</span>
                                   )}
-                                  <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isAwayWinner ? "text-gray-500" : "text-gray-200"}`}>
-                                    {m.away_team?.name || "A definir"}
-                                  </span>
                                 </div>
-                                {m.status === "confirmed" ? (
-                                  <span className={`text-xs font-extrabold ${isAwayWinner ? "text-emerald-400" : "text-gray-500"}`}>
-                                    {m.away_score}
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] text-gray-600 font-bold">-</span>
-                                )}
+                                {m.status === "pending" && <div className="absolute top-0 right-0 h-1 w-full bg-blue-500/30"></div>}
+                                {m.status === "dispute" && <div className="absolute top-0 right-0 h-1 w-full bg-red-500 animate-pulse"></div>}
+                                {m.status === "confirmed" && <div className="absolute top-0 right-0 h-1 w-full bg-emerald-500/50"></div>}
                               </div>
-                              {m.status === "pending" && <div className="absolute top-0 right-0 h-1 w-full bg-blue-500/30"></div>}
-                              {m.status === "dispute" && <div className="absolute top-0 right-0 h-1 w-full bg-red-500 animate-pulse"></div>}
-                              {m.status === "confirmed" && <div className="absolute top-0 right-0 h-1 w-full bg-emerald-500/50"></div>}
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Semifinais */}
-                  {cupMatches.some(m => m.round_number === 2) && (
-                    <div className="flex flex-col justify-between gap-6 h-[520px] w-[260px]">
-                      <div className="text-center text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-white/5 pb-2 flex flex-col items-center gap-2">
-                        <span>Semifinais</span>
-                        {cupMatches.filter(m => m.round_number === 2).every(m => m.status === "confirmed") && (
-                          <button
-                            onClick={() => handleGenerateNextCupPhase(2)}
-                            className="px-3 py-1 rounded-lg text-[9px] font-bold bg-[#10b981] hover:bg-emerald-600 text-white transition-all shadow"
-                          >
-                            🎲 Sortear Final
-                          </button>
-                        )}
-                      </div>
-                      <div className="flex flex-col justify-around h-full py-8 gap-8">
-                        {cupMatches.filter(m => m.round_number === 2).map((m) => {
-                          const isHomeWinner = m.status === "confirmed" && m.home_score > m.away_score;
-                          const isAwayWinner = m.status === "confirmed" && m.away_score > m.home_score;
-                          return (
-                            <div
-                              key={m.id}
-                              className="p-3 rounded-xl bg-[#0b0f19] border border-white/5 hover:border-[#10b981]/30 transition-all flex flex-col gap-2 relative overflow-hidden shadow-lg shadow-black/20"
+                  {cupMatches.some(m => m.round_number === 2) && (() => {
+                    const phaseMatches = cupMatches.filter(m => m.round_number === 2);
+                    const isPhaseReleased = phaseMatches.every(m => m.released);
+                    return (
+                      <div className="flex flex-col justify-between gap-6 h-[520px] w-[260px]">
+                        <div className="text-center text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-white/5 pb-2 flex flex-col items-center gap-2">
+                          <span>Semifinais</span>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
+                              isPhaseReleased 
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+                                : "bg-red-500/10 text-red-400 border-red-500/20"
+                            }`}>
+                              {isPhaseReleased ? "🔓 Liberada" : "🔒 Bloqueada"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleRoundRelease(2, isPhaseReleased, false)}
+                              className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-lg border transition-all ${
+                                isPhaseReleased
+                                  ? "bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/30"
+                                  : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                              }`}
                             >
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 truncate">
-                                  {m.home_team?.badge_url ? (
-                                    <img src={m.home_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                              {isPhaseReleased ? "Bloquear" : "Liberar"}
+                            </button>
+                          </div>
+                          {phaseMatches.every(m => m.status === "confirmed") && (
+                            <button
+                              type="button"
+                              onClick={() => handleGenerateNextCupPhase(2)}
+                              className="px-3 py-1 rounded-lg text-[9px] font-bold bg-[#10b981] hover:bg-emerald-600 text-white transition-all shadow"
+                            >
+                              🎲 Sortear Final
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex flex-col justify-around h-full py-8 gap-8">
+                          {phaseMatches.map((m) => {
+                            const isHomeWinner = m.status === "confirmed" && m.home_score > m.away_score;
+                            const isAwayWinner = m.status === "confirmed" && m.away_score > m.home_score;
+                            return (
+                              <div
+                                key={m.id}
+                                className="p-3 rounded-xl bg-[#0b0f19] border border-white/5 hover:border-[#10b981]/30 transition-all flex flex-col gap-2 relative overflow-hidden shadow-lg shadow-black/20"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 truncate">
+                                    {m.home_team?.badge_url ? (
+                                      <img src={m.home_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                    ) : (
+                                      <span className="text-xs">🛡️</span>
+                                    )}
+                                    <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isHomeWinner ? "text-gray-500" : "text-gray-200"}`}>
+                                      {m.home_team?.name || "A definir"}
+                                    </span>
+                                  </div>
+                                  {m.status === "confirmed" ? (
+                                    <span className={`text-xs font-extrabold ${isHomeWinner ? "text-emerald-400" : "text-gray-500"}`}>
+                                      {m.home_score}
+                                    </span>
                                   ) : (
-                                    <span className="text-xs">🛡️</span>
+                                    <span className="text-[10px] text-gray-600 font-bold">-</span>
                                   )}
-                                  <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isHomeWinner ? "text-gray-500" : "text-gray-200"}`}>
-                                    {m.home_team?.name || "A definir"}
-                                  </span>
                                 </div>
-                                {m.status === "confirmed" ? (
-                                  <span className={`text-xs font-extrabold ${isHomeWinner ? "text-emerald-400" : "text-gray-500"}`}>
-                                    {m.home_score}
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] text-gray-600 font-bold">-</span>
-                                )}
-                              </div>
-                              <div className="border-t border-white/5 my-0.5"></div>
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 truncate">
-                                  {m.away_team?.badge_url ? (
-                                    <img src={m.away_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                <div className="border-t border-white/5 my-0.5"></div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 truncate">
+                                    {m.away_team?.badge_url ? (
+                                      <img src={m.away_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                    ) : (
+                                      <span className="text-xs">🛡️</span>
+                                    )}
+                                    <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isAwayWinner ? "text-gray-500" : "text-gray-200"}`}>
+                                      {m.away_team?.name || "A definir"}
+                                    </span>
+                                  </div>
+                                  {m.status === "confirmed" ? (
+                                    <span className={`text-xs font-extrabold ${isAwayWinner ? "text-emerald-400" : "text-gray-500"}`}>
+                                      {m.away_score}
+                                    </span>
                                   ) : (
-                                    <span className="text-xs">🛡️</span>
+                                    <span className="text-[10px] text-gray-600 font-bold">-</span>
                                   )}
-                                  <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isAwayWinner ? "text-gray-500" : "text-gray-200"}`}>
-                                    {m.away_team?.name || "A definir"}
-                                  </span>
                                 </div>
-                                {m.status === "confirmed" ? (
-                                  <span className={`text-xs font-extrabold ${isAwayWinner ? "text-emerald-400" : "text-gray-500"}`}>
-                                    {m.away_score}
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] text-gray-600 font-bold">-</span>
-                                )}
+                                {m.status === "pending" && <div className="absolute top-0 right-0 h-1 w-full bg-blue-500/30"></div>}
+                                {m.status === "dispute" && <div className="absolute top-0 right-0 h-1 w-full bg-red-500 animate-pulse"></div>}
+                                {m.status === "confirmed" && <div className="absolute top-0 right-0 h-1 w-full bg-emerald-500/50"></div>}
                               </div>
-                              {m.status === "pending" && <div className="absolute top-0 right-0 h-1 w-full bg-blue-500/30"></div>}
-                              {m.status === "dispute" && <div className="absolute top-0 right-0 h-1 w-full bg-red-500 animate-pulse"></div>}
-                              {m.status === "confirmed" && <div className="absolute top-0 right-0 h-1 w-full bg-emerald-500/50"></div>}
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Grande Final */}
-                  {cupMatches.some(m => m.round_number === 3) && (
-                    <div className="flex flex-col justify-between gap-6 h-[520px] w-[260px]">
-                      <div className="text-center text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-white/5 pb-2">
-                        Grande Final
-                      </div>
-                      <div className="flex flex-col justify-center h-full">
-                        {cupMatches.filter(m => m.round_number === 3).map((m) => {
-                          const isHomeWinner = m.status === "confirmed" && m.home_score > m.away_score;
-                          const isAwayWinner = m.status === "confirmed" && m.away_score > m.home_score;
-                          return (
-                            <div
-                              key={m.id}
-                              className="p-3 rounded-xl bg-gradient-to-br from-[#1b233a] to-[#0b0f19] border border-amber-500/30 hover:border-amber-500/50 transition-all flex flex-col gap-2 relative overflow-hidden shadow-xl shadow-amber-500/5"
+                  {cupMatches.some(m => m.round_number === 3) && (() => {
+                    const phaseMatches = cupMatches.filter(m => m.round_number === 3);
+                    const isPhaseReleased = phaseMatches.every(m => m.released);
+                    return (
+                      <div className="flex flex-col justify-between gap-6 h-[520px] w-[260px]">
+                        <div className="text-center text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-white/5 pb-2 flex flex-col items-center gap-2">
+                          <span>Grande Final</span>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
+                              isPhaseReleased 
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+                                : "bg-red-500/10 text-red-400 border-red-500/20"
+                            }`}>
+                              {isPhaseReleased ? "🔓 Liberada" : "🔒 Bloqueada"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleRoundRelease(3, isPhaseReleased, false)}
+                              className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-lg border transition-all ${
+                                isPhaseReleased
+                                  ? "bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/30"
+                                  : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                              }`}
                             >
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 truncate">
-                                  {m.home_team?.badge_url ? (
-                                    <img src={m.home_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                              {isPhaseReleased ? "Bloquear" : "Liberar"}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex flex-col justify-center h-full">
+                          {phaseMatches.map((m) => {
+                            const isHomeWinner = m.status === "confirmed" && m.home_score > m.away_score;
+                            const isAwayWinner = m.status === "confirmed" && m.away_score > m.home_score;
+                            return (
+                              <div
+                                key={m.id}
+                                className="p-3 rounded-xl bg-gradient-to-br from-[#1b233a] to-[#0b0f19] border border-amber-500/30 hover:border-amber-500/50 transition-all flex flex-col gap-2 relative overflow-hidden shadow-xl shadow-amber-500/5"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 truncate">
+                                    {m.home_team?.badge_url ? (
+                                      <img src={m.home_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                    ) : (
+                                      <span className="text-xs">🛡️</span>
+                                    )}
+                                    <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isHomeWinner ? "text-gray-500" : "text-gray-200"}`}>
+                                      {m.home_team?.name || "A definir"}
+                                    </span>
+                                  </div>
+                                  {m.status === "confirmed" ? (
+                                    <span className={`text-xs font-extrabold ${isHomeWinner ? "text-amber-400" : "text-gray-500"}`}>
+                                      {m.home_score}
+                                    </span>
                                   ) : (
-                                    <span className="text-xs">🛡️</span>
+                                    <span className="text-[10px] text-gray-600 font-bold">-</span>
                                   )}
-                                  <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isHomeWinner ? "text-gray-500" : "text-gray-200"}`}>
-                                    {m.home_team?.name || "A definir"}
-                                  </span>
                                 </div>
-                                {m.status === "confirmed" ? (
-                                  <span className={`text-xs font-extrabold ${isHomeWinner ? "text-amber-400" : "text-gray-500"}`}>
-                                    {m.home_score}
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] text-gray-600 font-bold">-</span>
-                                )}
-                              </div>
-                              <div className="border-t border-white/5 my-0.5"></div>
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 truncate">
-                                  {m.away_team?.badge_url ? (
-                                    <img src={m.away_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                <div className="border-t border-white/5 my-0.5"></div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 truncate">
+                                    {m.away_team?.badge_url ? (
+                                      <img src={m.away_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                    ) : (
+                                      <span className="text-xs">🛡️</span>
+                                    )}
+                                    <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isAwayWinner ? "text-gray-500" : "text-gray-200"}`}>
+                                      {m.away_team?.name || "A definir"}
+                                    </span>
+                                  </div>
+                                  {m.status === "confirmed" ? (
+                                    <span className={`text-xs font-extrabold ${isAwayWinner ? "text-amber-400" : "text-gray-500"}`}>
+                                      {m.away_score}
+                                    </span>
                                   ) : (
-                                    <span className="text-xs">🛡️</span>
+                                    <span className="text-[10px] text-gray-600 font-bold">-</span>
                                   )}
-                                  <span className={`text-xs font-semibold truncate ${m.status === "confirmed" && !isAwayWinner ? "text-gray-500" : "text-gray-200"}`}>
-                                    {m.away_team?.name || "A definir"}
-                                  </span>
                                 </div>
-                                {m.status === "confirmed" ? (
-                                  <span className={`text-xs font-extrabold ${isAwayWinner ? "text-amber-400" : "text-gray-500"}`}>
-                                    {m.away_score}
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] text-gray-600 font-bold">-</span>
-                                )}
+                                {m.status === "pending" && <div className="absolute top-0 right-0 h-1 w-full bg-amber-500/30"></div>}
+                                {m.status === "dispute" && <div className="absolute top-0 right-0 h-1 w-full bg-red-500 animate-pulse"></div>}
+                                {m.status === "confirmed" && <div className="absolute top-0 right-0 h-1 w-full bg-amber-500"></div>}
                               </div>
-                              {m.status === "pending" && <div className="absolute top-0 right-0 h-1 w-full bg-amber-500/30"></div>}
-                              {m.status === "dispute" && <div className="absolute top-0 right-0 h-1 w-full bg-red-500 animate-pulse"></div>}
-                              {m.status === "confirmed" && <div className="absolute top-0 right-0 h-1 w-full bg-amber-500"></div>}
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               </div>
             </div>

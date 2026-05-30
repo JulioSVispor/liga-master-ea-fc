@@ -33,6 +33,11 @@ export default function AdminSeasonPage() {
   const [roundsPerHalf, setRoundsPerHalf] = useState(10);
   const [teamsList, setTeamsList] = useState([]);
 
+  // Validação de jogos pendentes e cargo
+  const [pendingMatches, setPendingMatches] = useState([]);
+  const [userRole, setUserRole] = useState("user");
+  const [forceClose, setForceClose] = useState(false);
+
   const showMsg = (text, type = "success") => {
     setMsg({ text, type });
     setTimeout(() => setMsg({ text: "", type: "" }), 6000);
@@ -42,6 +47,17 @@ export default function AdminSeasonPage() {
     async function loadData() {
       setLoading(true);
       try {
+        // Obter o cargo do usuário logado
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", user.id)
+            .maybeSingle();
+          if (profile) setUserRole(profile.role);
+        }
+
         // Temporada ativa
         const { data: seasonData } = await supabase
           .from("seasons")
@@ -71,6 +87,22 @@ export default function AdminSeasonPage() {
         setRoundsPerHalf(roundsVal);
 
         if (seasonData) {
+          // Carregar partidas pendentes/disputa da temporada ativa
+          const { data: pendingData } = await supabase
+            .from("matches")
+            .select(`
+              id,
+              round_number,
+              status,
+              cup_name,
+              home_team:teams!home_team_id(name),
+              away_team:teams!away_team_id(name),
+              leagues(name)
+            `)
+            .eq("season_id", seasonData.id)
+            .in("status", ["pending", "dispute"]);
+          
+          setPendingMatches(pendingData || []);
           // Artilheiros (top 5 por gols)
           const { data: scorersData } = await supabase
             .from("match_events")
@@ -260,6 +292,10 @@ export default function AdminSeasonPage() {
       showMsg("Digite exatamente 'CONFIRMAR' para prosseguir.", "error");
       return;
     }
+    if (pendingMatches.length > 0 && !(userRole === "master" && forceClose)) {
+      showMsg("Não é possível finalizar a temporada com partidas pendentes.", "error");
+      return;
+    }
     if (!activeSeason) return;
 
     setFinishing(true);
@@ -288,6 +324,8 @@ export default function AdminSeasonPage() {
       setFinishing(false);
     }
   };
+
+  const isFinishDisabled = pendingMatches.length > 0 && !(userRole === "master" && forceClose);
 
   if (loading) {
     return (
@@ -334,6 +372,52 @@ export default function AdminSeasonPage() {
         </div>
       ) : (
         <>
+          {/* Warning de partidas pendentes */}
+          {pendingMatches.length > 0 && (
+            <div className="glass-panel rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 space-y-4 text-left">
+              <div className="flex items-center gap-2 text-amber-400 font-bold">
+                <span className="text-xl">⚠️</span>
+                <h4>Há {pendingMatches.length} partidas pendentes ou em disputa nesta temporada</h4>
+              </div>
+              <p className="text-xs text-gray-400">
+                O campeonato não pode ser finalizado até que todos os jogos sejam reportados e confirmados.
+              </p>
+              
+              <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
+                {pendingMatches.map((m) => (
+                  <div key={m.id} className="flex justify-between items-center bg-[#0d1527]/50 border border-white/5 p-2.5 rounded-xl text-xs">
+                    <span className="text-gray-300">
+                      Rodada {m.round_number} - {m.home_team?.name} vs {m.away_team?.name} ({m.cup_name || m.leagues?.name || "Copa"})
+                    </span>
+                    <span className={`px-2 py-0.5 rounded font-bold ${
+                      m.status === "dispute" ? "bg-red-500/15 text-red-400 border border-red-500/20 animate-pulse" : "bg-amber-500/15 text-amber-400 border border-amber-500/20"
+                    }`}>
+                      {m.status === "dispute" ? "DISPUTA" : "PENDENTE"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {userRole === "master" ? (
+                <div className="pt-2 border-t border-white/5">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-amber-400 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={forceClose}
+                      onChange={(e) => setForceClose(e.target.checked)}
+                      className="rounded border-white/10 bg-[#0d1527] text-amber-500 focus:ring-0 cursor-pointer h-4 w-4"
+                    />
+                    Forçar encerramento da temporada (ignorar validação de jogos pendentes)
+                  </label>
+                </div>
+              ) : (
+                <p className="text-[11px] text-red-400">
+                  Apenas o Dono da Liga (Master) pode forçar o encerramento com partidas pendentes.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Painel de Fases da Temporada */}
           <div className="glass-panel rounded-2xl border border-white/5 bg-[#090d16]/75 p-6 sm:p-8 space-y-6">
             <div className="border-b border-white/5 pb-4">
@@ -546,7 +630,8 @@ export default function AdminSeasonPage() {
                     </p>
                     <button
                       onClick={() => setShowModal(true)}
-                      className="w-full md:w-auto rounded-xl bg-emerald-500 hover:bg-emerald-600 px-6 py-3 text-xs font-bold text-white transition-all active:scale-[0.98] flex-shrink-0 whitespace-nowrap"
+                      disabled={isFinishDisabled}
+                      className="w-full md:w-auto rounded-xl bg-emerald-500 hover:bg-emerald-600 px-6 py-3 text-xs font-bold text-white transition-all active:scale-[0.98] flex-shrink-0 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       🏁 Finalizar Temporada
                     </button>
@@ -580,7 +665,8 @@ export default function AdminSeasonPage() {
               {activeSeason.status === "active" && (
                 <button
                   onClick={() => setShowModal(true)}
-                  className="rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 px-5 py-2.5 text-sm font-bold text-red-400 transition-all self-start sm:self-center"
+                  disabled={isFinishDisabled}
+                  className="rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 px-5 py-2.5 text-sm font-bold text-red-400 transition-all self-start sm:self-center disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   🏁 Finalizar Temporada
                 </button>

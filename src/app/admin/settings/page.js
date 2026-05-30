@@ -107,15 +107,31 @@ const TABS = [
 export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [purging, setPurging] = useState(false);
-  const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
   const [activeTab, setActiveTab] = useState("mercado");
   const [msg, setMsg] = useState({ text: "", type: "" });
-  const [msgPurge, setMsgPurge] = useState({ text: "", type: "" });
+  const [userRole, setUserRole] = useState(null);
+
+  // Estados de confirmação dos Master Resets
+  const [masterActionLoading, setMasterActionLoading] = useState(false);
+  const [masterMsg, setMasterMsg] = useState({ text: "", type: "" });
+  
+  const [showResetSquads, setShowResetSquads] = useState(false);
+  const [confirmResetSquadsText, setConfirmResetSquadsText] = useState("");
+
+  const [showResetBudgets, setShowResetBudgets] = useState(false);
+  const [confirmResetBudgetsText, setConfirmResetBudgetsText] = useState("");
+
+  const [showDeleteClubs, setShowDeleteClubs] = useState(false);
+  const [confirmDeleteClubsText, setConfirmDeleteClubsText] = useState("");
 
   const showMsg = (text, type = "success") => {
     setMsg({ text, type });
     setTimeout(() => setMsg({ text: "", type: "" }), 5000);
+  };
+
+  const showMasterMsg = (text, type = "success") => {
+    setMasterMsg({ text, type });
+    setTimeout(() => setMasterMsg({ text: "", type: "" }), 6000);
   };
 
   // ── Estado dos parâmetros ────────────────────────────────────────────────
@@ -160,6 +176,19 @@ export default function AdminSettingsPage() {
   // ── Carregar configurações ───────────────────────────────────────────────
   const loadSettings = useCallback(async () => {
     try {
+      // Carregar papel do usuário logado
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", session.user.id)
+          .single();
+        if (profile) {
+          setUserRole(profile.role);
+        }
+      }
+
       const { data } = await supabase.from("settings").select("*");
       if (data) {
         const map = {};
@@ -213,18 +242,73 @@ export default function AdminSettingsPage() {
     }
   };
 
-  // ── Purgar agentes livres ─────────────────────────────────────────────────
-  const handlePurge = async () => {
-    setPurging(true);
+  // ── Handlers de Master Reset ─────────────────────────────────────────────
+  const handleResetAllSquads = async () => {
+    if (confirmResetSquadsText !== "RESETAR ELENCOS") {
+      showMasterMsg("Texto de confirmação incorreto.", "error");
+      return;
+    }
+    setMasterActionLoading(true);
     try {
-      const { data, error } = await supabase.rpc("purge_free_agents");
+      const { data, error } = await supabase.rpc("reset_all_squads");
       if (error) throw error;
-      setMsgPurge({ text: data?.message || "Jogadores livres purgados!", type: "success" });
+      if (data && data.success) {
+        showMasterMsg(data.message, "success");
+        setShowResetSquads(false);
+        setConfirmResetSquadsText("");
+      } else {
+        showMasterMsg(data?.message || "Erro ao resetar elencos.", "error");
+      }
     } catch (err) {
-      setMsgPurge({ text: "Erro ao purgar: " + err.message, type: "error" });
+      showMasterMsg(err.message, "error");
     } finally {
-      setPurging(false);
-      setShowPurgeConfirm(false);
+      setMasterActionLoading(false);
+    }
+  };
+
+  const handleResetAllBudgets = async () => {
+    if (confirmResetBudgetsText !== "RESETAR FINANÇAS") {
+      showMasterMsg("Texto de confirmação incorreto.", "error");
+      return;
+    }
+    setMasterActionLoading(true);
+    try {
+      const { data, error } = await supabase.rpc("reset_all_budgets");
+      if (error) throw error;
+      if (data && data.success) {
+        showMasterMsg(data.message, "success");
+        setShowResetBudgets(false);
+        setConfirmResetBudgetsText("");
+      } else {
+        showMasterMsg(data?.message || "Erro ao restaurar orçamentos.", "error");
+      }
+    } catch (err) {
+      showMasterMsg(err.message, "error");
+    } finally {
+      setMasterActionLoading(false);
+    }
+  };
+
+  const handleDeleteAllClubs = async () => {
+    if (confirmDeleteClubsText !== "DELETAR CLUBES") {
+      showMasterMsg("Texto de confirmação incorreto.", "error");
+      return;
+    }
+    setMasterActionLoading(true);
+    try {
+      const { data, error } = await supabase.rpc("delete_all_clubs");
+      if (error) throw error;
+      if (data && data.success) {
+        showMasterMsg(data.message, "success");
+        setShowDeleteClubs(false);
+        setConfirmDeleteClubsText("");
+      } else {
+        showMasterMsg(data?.message || "Erro ao deletar clubes.", "error");
+      }
+    } catch (err) {
+      showMasterMsg(err.message, "error");
+    } finally {
+      setMasterActionLoading(false);
     }
   };
 
@@ -236,7 +320,19 @@ export default function AdminSettingsPage() {
     );
   }
 
-  const activeTabData = TABS.find((t) => t.key === activeTab);
+  // Abas dinâmicas: apenas master vê a aba de perigo
+  const tabs = [
+    { key: "mercado",    label: "🔄 Mercado",    title: "Mercado & Transferências" },
+    { key: "financas",  label: "💰 Finanças",   title: "Configurações Financeiras" },
+    { key: "clube",     label: "🎮 Clube",       title: "Regras do Clube" },
+    { key: "prazos",    label: "⏱️ Prazos",     title: "Prazos & Tempos" },
+    { key: "parametros",label: "🔢 Parâmetros", title: "Parâmetros Gerais" },
+  ];
+  if (userRole === "master") {
+    tabs.push({ key: "perigo", label: "⚠️ Master Reset", title: "Zona de Master Reset (Dono da Liga)" });
+  }
+
+  const activeTabData = tabs.find((t) => t.key === activeTab);
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -261,7 +357,7 @@ export default function AdminSettingsPage() {
 
       {/* Abas */}
       <div className="flex gap-1 overflow-x-auto pb-1 border-b border-white/5">
-        {TABS.map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
@@ -516,50 +612,77 @@ export default function AdminSettingsPage() {
           </div>
         )}
 
-        {/* ── ABA: PERIGO ──────────────────────────────────────────────── */}
-        {activeTab === "perigo" && (
-          <div className="space-y-4">
+        {/* ── ABA: PERIGO (ZONA DE MASTER RESET) ───────────────────────── */}
+        {activeTab === "perigo" && userRole === "master" && (
+          <div className="space-y-6">
             <div className="p-4 rounded-xl bg-red-500/5 border border-red-500/20 text-sm text-red-300 flex items-start gap-3">
               <span className="text-lg flex-shrink-0">⚠️</span>
-              <p>As ações abaixo são <strong>irreversíveis</strong>. Leia com atenção antes de confirmar.</p>
-            </div>
-
-            <FeedbackBanner msg={msgPurge} />
-
-            <div className="p-5 rounded-xl border border-red-500/20 bg-red-500/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold text-white flex items-center gap-2">
-                  🗑️ Purgar Jogadores Livres
-                  <Tip text="Remove permanentemente todos os jogadores sem time (agentes livres) e cancela seus leilões ativos. Use antes de uma nova importação." />
-                </p>
-                <p className="text-xs text-gray-400 mt-1">
-                  Apaga todos os agentes livres e seus leilões ativos do banco de dados.
+                <p className="font-bold text-white uppercase tracking-wide text-xs">Acesso Restrito: Dono da Liga</p>
+                <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+                  As ações abaixo realizam alterações estruturais profundas no banco de dados e são <strong>totalmente irreversíveis</strong>.
+                  Elas requerem digitação de um texto chave de confirmação para serem executadas.
                 </p>
               </div>
-              {!showPurgeConfirm ? (
-                <button
-                  onClick={() => setShowPurgeConfirm(true)}
-                  className="rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 px-5 py-2.5 text-xs font-bold text-red-400 transition-all whitespace-nowrap self-start sm:self-center"
-                >
-                  Purgar Jogadores
-                </button>
-              ) : (
-                <div className="flex gap-2 self-start sm:self-center">
-                  <button
-                    onClick={handlePurge}
-                    disabled={purging}
-                    className="rounded-xl bg-red-500 hover:bg-red-600 px-5 py-2.5 text-xs font-bold text-white transition-all disabled:opacity-50 whitespace-nowrap"
-                  >
-                    {purging ? "Purgando..." : "✓ Confirmar"}
-                  </button>
-                  <button
-                    onClick={() => setShowPurgeConfirm(false)}
-                    className="rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-2.5 text-xs font-bold text-gray-300 transition-all"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              )}
+            </div>
+
+            {masterMsg.text && (
+              <div className={`p-3 rounded-xl border text-sm flex items-center gap-2 ${
+                masterMsg.type === "error"
+                  ? "bg-red-500/10 border-red-500/20 text-red-400"
+                  : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+              }`}>
+                <span>{masterMsg.type === "error" ? "⚠️" : "✅"}</span>
+                <span className="text-xs font-semibold">{masterMsg.text}</span>
+              </div>
+            )}
+
+            {/* Reset de Elencos */}
+            <div className="p-5 rounded-xl border border-red-500/20 bg-red-500/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-white">🔄 Resetar Todos os Elencos</p>
+                <p className="text-xs text-gray-400 mt-1 leading-relaxed max-w-xl">
+                  Remove os vínculos de todos os jogadores ativos. Todos os atletas cadastrados na liga voltarão a ser Agentes Livres. Os times ficarão sem nenhum jogador. O histórico de transferências registrará as liberações.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowResetSquads(true)}
+                className="rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 px-5 py-2.5 text-xs font-bold text-red-400 transition-all whitespace-nowrap self-start sm:self-center"
+              >
+                Resetar Elencos
+              </button>
+            </div>
+
+            {/* Reset de Finanças */}
+            <div className="p-5 rounded-xl border border-amber-500/20 bg-amber-500/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-white">💰 Restaurar Finanças Globais</p>
+                <p className="text-xs text-gray-400 mt-1 leading-relaxed max-w-xl">
+                  Restaura o orçamento em caixa e o limite de teto salarial de todos os times para os valores padrões definidos nos parâmetros gerais (Orçamento Padrão e Teto Salarial Padrão).
+                </p>
+              </div>
+              <button
+                onClick={() => setShowResetBudgets(true)}
+                className="rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 px-5 py-2.5 text-xs font-bold text-amber-400 transition-all whitespace-nowrap self-start sm:self-center"
+              >
+                Restaurar Finanças
+              </button>
+            </div>
+
+            {/* Reset Absoluto */}
+            <div className="p-5 rounded-xl border border-red-500/30 bg-red-950/15 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-white text-red-400">🔥 Deletar Todos os Clubes e Contas</p>
+                <p className="text-xs text-gray-400 mt-1 leading-relaxed max-w-xl">
+                  Ação drástica! Exclui todos os clubes, limpa tabelas de jogos (ligas/copas), esvazia lances do mercado, zera históricos de transações e deleta do sistema todas as contas de usuários normais (treinadores). Deixa a liga limpa para recomeçar o campeonato.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowDeleteClubs(true)}
+                className="rounded-xl bg-red-600 hover:bg-red-700 px-5 py-2.5 text-xs font-bold text-white transition-all whitespace-nowrap self-start sm:self-center shadow-lg shadow-red-500/20"
+              >
+                Deletar Clubes e Contas
+              </button>
             </div>
           </div>
         )}
@@ -577,6 +700,106 @@ export default function AdminSettingsPage() {
           </div>
         )}
       </div>
+
+      {/* Modais de Confirmação Master Reset */}
+      {showResetSquads && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-md glass-panel p-6 sm:p-8 rounded-2xl border border-white/10 bg-[#090d16] shadow-2xl space-y-5">
+            <h3 className="text-base font-bold text-white">Confirmar Reset de Elencos</h3>
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Esta ação removerá TODOS os jogadores de seus times e os colocará como agentes livres. Os times ficarão vazios. Digite <strong className="text-red-400 font-bold">RESETAR ELENCOS</strong> abaixo para confirmar:
+            </p>
+            <input
+              type="text"
+              placeholder="Digite aqui..."
+              value={confirmResetSquadsText}
+              onChange={(e) => setConfirmResetSquadsText(e.target.value)}
+              className="w-full bg-[#060913] border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-red-500"
+            />
+            <div className="flex gap-2 justify-end pt-2">
+              <button
+                onClick={() => { setShowResetSquads(false); setConfirmResetSquadsText(""); }}
+                className="rounded-xl bg-white/5 hover:bg-white/10 px-4 py-2 text-xs font-bold text-gray-300 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleResetAllSquads}
+                disabled={masterActionLoading}
+                className="rounded-xl bg-red-500 hover:bg-red-600 px-5 py-2 text-xs font-bold text-white transition-all disabled:opacity-50"
+              >
+                {masterActionLoading ? "Processando..." : "Confirmar Reset"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showResetBudgets && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-md glass-panel p-6 sm:p-8 rounded-2xl border border-white/10 bg-[#090d16] shadow-2xl space-y-5">
+            <h3 className="text-base font-bold text-white">Confirmar Reset de Finanças</h3>
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Todos os orçamentos e tetos salariais dos times serão redefinidos para os padrões globais da liga. Digite <strong className="text-amber-400 font-bold">RESETAR FINANÇAS</strong> abaixo para confirmar:
+            </p>
+            <input
+              type="text"
+              placeholder="Digite aqui..."
+              value={confirmResetBudgetsText}
+              onChange={(e) => setConfirmResetBudgetsText(e.target.value)}
+              className="w-full bg-[#060913] border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-amber-400"
+            />
+            <div className="flex gap-2 justify-end pt-2">
+              <button
+                onClick={() => { setShowResetBudgets(false); setConfirmResetBudgetsText(""); }}
+                className="rounded-xl bg-white/5 hover:bg-white/10 px-4 py-2 text-xs font-bold text-gray-300 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleResetAllBudgets}
+                disabled={masterActionLoading}
+                className="rounded-xl bg-amber-500 hover:bg-amber-600 px-5 py-2 text-xs font-bold text-black transition-all disabled:opacity-50"
+              >
+                {masterActionLoading ? "Processando..." : "Confirmar Restauro"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteClubs && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-md glass-panel p-6 sm:p-8 rounded-2xl border border-red-500/20 bg-[#090d16] shadow-2xl space-y-5">
+            <h3 className="text-base font-bold text-white text-red-500 uppercase tracking-wide text-sm">🔥 AÇÃO EXTREMAMENTE CRÍTICA</h3>
+            <p className="text-xs text-red-300 leading-relaxed">
+              Esta ação apagará permanentemente todos os times, jogos, histórico de transferências, copas e removerá todas as contas dos técnicos (profiles comuns). Digite <strong className="text-red-500 font-bold">DELETAR CLUBES</strong> abaixo para confirmar:
+            </p>
+            <input
+              type="text"
+              placeholder="Digite aqui..."
+              value={confirmDeleteClubsText}
+              onChange={(e) => setConfirmDeleteClubsText(e.target.value)}
+              className="w-full bg-[#060913] border border-red-500/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-red-500"
+            />
+            <div className="flex gap-2 justify-end pt-2">
+              <button
+                onClick={() => { setShowDeleteClubs(false); setConfirmDeleteClubsText(""); }}
+                className="rounded-xl bg-white/5 hover:bg-white/10 px-4 py-2 text-xs font-bold text-gray-300 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeleteAllClubs}
+                disabled={masterActionLoading}
+                className="rounded-xl bg-red-600 hover:bg-red-700 px-5 py-2 text-xs font-bold text-white transition-all disabled:opacity-50"
+              >
+                {masterActionLoading ? "Deletando Tudo..." : "Sim, Deletar Tudo"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

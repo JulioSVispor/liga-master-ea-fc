@@ -21,6 +21,10 @@ export default function AdminArbitrationPage() {
   const [motmPlayerId, setMotmPlayerId] = useState("");
   const [actionLoading, setActionLoading] = useState(null);
 
+  // Estados para W.O.
+  const [showWoModal, setShowWoModal] = useState(false);
+  const [selectedMatchForWo, setSelectedMatchForWo] = useState(null);
+
   // Alerta inline
   const [alert, setAlert] = useState(null);
 
@@ -407,6 +411,85 @@ export default function AdminArbitrationPage() {
     }
   };
 
+  // Funções de W.O.
+  const openWoModal = (match) => {
+    setSelectedMatchForWo(match);
+    setShowWoModal(true);
+  };
+
+  const handleConfirmWo = async (winnerSide) => {
+    if (!selectedMatchForWo) return;
+    setActionLoading(selectedMatchForWo.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const adminUserId = session?.user?.id;
+
+      // 1. Limpar eventos anteriores
+      await supabase.from("match_events").delete().eq("match_id", selectedMatchForWo.id);
+
+      const hScore = winnerSide === "home" ? 3 : 0;
+      const aScore = winnerSide === "away" ? 3 : 0;
+
+      // 2. Atualizar placar de W.O. (3x0 ou 0x3)
+      const { error: matchError } = await supabase
+        .from("matches")
+        .update({
+          home_score: hScore,
+          away_score: aScore,
+          reported_by: selectedMatchForWo.reported_by || adminUserId,
+          motm_player_id: null,
+          disputed_by: null,
+          dispute_reason: null,
+          dispute_proof_url: null,
+        })
+        .eq("id", selectedMatchForWo.id);
+
+      if (matchError) throw matchError;
+
+      // 3. Confirmar e homologar partida via RPC
+      const { data: rpcData, error: rpcError } = await supabase.rpc("confirm_match", {
+        p_match_id: selectedMatchForWo.id
+      });
+
+      if (rpcError || (rpcData && !rpcData.success)) {
+        throw new Error(rpcError?.message || rpcData?.message || "Falha na homologação do W.O.");
+      }
+
+      // 4. Notificar envolvidos
+      const homeUser = selectedMatchForWo.home_team?.user_id;
+      const awayUser = selectedMatchForWo.away_team?.user_id;
+      const notifications = [];
+      if (homeUser) {
+        notifications.push({
+          user_id: homeUser,
+          title: "W.O. Aplicado pelo Admin",
+          content: `Foi aplicado W.O. no confronto contra o ${selectedMatchForWo.away_team?.name} (${hScore} x ${aScore}).`
+        });
+      }
+      if (awayUser) {
+        notifications.push({
+          user_id: awayUser,
+          title: "W.O. Aplicado pelo Admin",
+          content: `Foi aplicado W.O. no confronto contra o ${selectedMatchForWo.home_team?.name} (${hScore} x ${aScore}).`
+        });
+      }
+
+      if (notifications.length > 0) {
+        await supabase.from("notifications").insert(notifications);
+      }
+
+      triggerAlert("success", "W.O. aplicado com sucesso!");
+      setShowWoModal(false);
+      setSelectedMatchForWo(null);
+      loadData();
+    } catch (err) {
+      console.error(err);
+      triggerAlert("error", "Erro ao aplicar W.O.: " + err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   // Filtrar partidas
   const filteredMatches = matches.filter(m => {
     if (filterMatch === "all") return true;
@@ -545,6 +628,13 @@ export default function AdminArbitrationPage() {
                       className="flex-1 md:flex-none px-4 py-2.5 rounded-xl text-xs font-bold bg-[#10b981] text-white hover:bg-emerald-600 shadow-lg shadow-[#10b981]/10 transition-all"
                     >
                       ⚡ Arbitrar Placar
+                    </button>
+                    <button
+                      onClick={() => openWoModal(match)}
+                      disabled={actionLoading !== null}
+                      className="flex-1 md:flex-none px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500 hover:text-black transition-all"
+                    >
+                      🏳️ Dar W.O.
                     </button>
                     {match.reported_by && (
                       <button
@@ -857,6 +947,66 @@ export default function AdminArbitrationPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Aplicar W.O. */}
+      {showWoModal && selectedMatchForWo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-md p-6 rounded-2xl bg-[#090d16] border border-white/10 shadow-2xl space-y-6">
+            <div className="flex justify-between items-center border-b border-white/5 pb-4">
+              <h3 className="text-lg font-bold text-white">Decretar W.O.</h3>
+              <button onClick={() => { setShowWoModal(false); setSelectedMatchForWo(null); }} className="text-gray-400 hover:text-white text-lg">✕</button>
+            </div>
+            
+            <div className="space-y-4">
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Escolha qual time sairá vencedor pelo placar padrão de W.O. (3x0 ou 0x3). Esta ação irá atualizar a tabela de classificação e marcar a partida como homologada.
+              </p>
+
+              <div className="p-4 rounded-xl bg-[#0d1527]/50 border border-white/5 space-y-3">
+                <div className="flex justify-between text-xs text-gray-400 font-semibold border-b border-white/5 pb-1">
+                  <span>Mandante</span>
+                  <span>Visitante</span>
+                </div>
+                <div className="flex justify-between text-sm font-bold text-white">
+                  <span>{selectedMatchForWo.home_team?.name}</span>
+                  <span>{selectedMatchForWo.away_team?.name}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleConfirmWo("home")}
+                  disabled={actionLoading !== null}
+                  className="py-3 px-4 rounded-xl text-xs font-bold bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30 hover:bg-[#10b981] hover:text-white transition-all text-center flex flex-col items-center justify-center gap-1"
+                >
+                  <span className="text-lg">🏠 Vitória da Casa</span>
+                  <span className="font-extrabold text-sm">3 x 0</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleConfirmWo("away")}
+                  disabled={actionLoading !== null}
+                  className="py-3 px-4 rounded-xl text-xs font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30 hover:bg-blue-500 hover:text-white transition-all text-center flex flex-col items-center justify-center gap-1"
+                >
+                  <span className="text-lg">🚀 Vitória de Fora</span>
+                  <span className="font-extrabold text-sm">0 x 3</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-white/5">
+              <button
+                type="button"
+                onClick={() => { setShowWoModal(false); setSelectedMatchForWo(null); }}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-white/5 hover:bg-white/10 text-white border border-white/10"
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}

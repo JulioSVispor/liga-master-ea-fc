@@ -80,7 +80,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form className="space-y-6" onSubmit={handleLogin}>
+          <form noValidate className="space-y-6" onSubmit={handleLogin}>
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-300">E-mail</label>
               <div className="mt-1">

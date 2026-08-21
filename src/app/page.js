@@ -4,7 +4,7 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-screen bg-[#060913] text-gray-100 selection:bg-[#10b981] selection:text-white">
       {/* Header / Navbar */}
-      <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-[#060913]/80 backdrop-blur-md">
+      <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-[#060913]/80">
         <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2">
             <span className="text-2xl font-bold tracking-tight bg-gradient-to-r from-[#10b981] to-[#3b82f6] bg-clip-text text-transparent">

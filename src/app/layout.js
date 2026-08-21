@@ -1,28 +1,26 @@
-import { Geist, Geist_Mono } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import { MaintenanceBanner } from "@/components/ui/MaintenanceBanner";
 
 export const metadata = {
-  title: "Liga Master Manager | EA FC 26",
-  description: "Gerencie sua liga de futebol virtual do EA FC 26 com controle de orçamento, teto salarial, mercado de transferências (leilão e trocas), torneios e estatísticas completas.",
+  title: {
+    default: "Liga Master",
+    template: "%s | Liga Master",
+  },
+  description: "Gestão objetiva de clubes, competições, partidas, mercado e história de comunidades de EA FC.",
 };
 
 export default function RootLayout({ children }) {
   return (
     <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      lang="pt-BR"
+      className={`${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <MaintenanceBanner />
+        {children}
+      </body>
     </html>
   );
 }

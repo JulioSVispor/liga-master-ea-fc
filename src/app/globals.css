@@ -16,22 +16,18 @@
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   overflow-x: hidden;
 }
 
-/* Efeito Glassmorphism Premium */
+/* Efeito Glassmorphism Leve (Otimizado para Performance) */
 .glass-panel {
-  background: rgba(17, 24, 39, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(17, 24, 39, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .glass-card {
-  background: rgba(31, 41, 55, 0.4);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(31, 41, 55, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.05);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -53,6 +49,11 @@ body {
   height: 8px;
 }
 
+* {
+  scrollbar-color: #374151 #090d16;
+  scrollbar-width: thin;
+}
+
 ::-webkit-scrollbar-track {
   background: #090d16;
 }
@@ -64,4 +65,49 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #10b981;
+}
+
+/* Remover setas (spin buttons) de inputs do tipo number em todos os navegadores */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type=number] {
+  -moz-appearance: textfield; /* Firefox */
+  appearance: textfield;
+}
+/* Estado global de contenção: visível em todas as rotas e estável em mobile. */
+.maintenance-banner {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 2.5rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid rgb(245 158 11 / 0.35);
+  background: #1b1408;
+  color: #f8e7bd;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
+.maintenance-banner__label {
+  flex: none;
+  color: #fbbf24;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 640px) {
+  .maintenance-banner {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
 }

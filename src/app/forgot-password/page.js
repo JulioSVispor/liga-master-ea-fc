@@ -67,7 +67,7 @@ export default function ForgotPassword() {
             </div>
           )}
 
-          <form className="space-y-6" onSubmit={handleResetPassword}>
+          <form noValidate className="space-y-6" onSubmit={handleResetPassword}>
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-300">
                 E-mail da sua conta

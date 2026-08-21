@@ -195,13 +195,13 @@ export default function InvitesPage() {
 
       {/* Modal de Adição */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4">
           <div className="glass-panel w-full max-w-sm p-6 rounded-2xl border border-white/10 bg-[#090d16]/95 shadow-2xl">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-sm font-bold text-white">+ Adicionar Participante</h3>
               <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-white text-xs bg-white/5 px-2.5 py-1 rounded-lg">✕</button>
             </div>
-            <form onSubmit={handleAdd} className="space-y-4">
+            <form noValidate onSubmit={handleAdd} className="space-y-4">
               <div>
                 <label className="text-xs font-medium text-gray-300 block mb-1">E-mail *</label>
                 <input

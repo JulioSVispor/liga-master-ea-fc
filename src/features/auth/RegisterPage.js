@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { READ_ONLY_MODE } from "@/lib/maintenance";
+import { isStrongPassword } from "@/lib/auth/password-policy";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -21,8 +23,15 @@ export default function RegisterPage() {
     e.preventDefault();
     setError("");
 
+    if (READ_ONLY_MODE) {
+      setError("O cadastro está pausado durante a manutenção programada.");
+      return;
+    }
     if (password !== confirmPassword) { setError("As senhas não coincidem."); return; }
-    if (password.length < 6) { setError("A senha deve ter pelo menos 6 caracteres."); return; }
+    if (!isStrongPassword(password)) {
+      setError("A senha deve ter pelo menos 8 caracteres, incluindo letras e números.");
+      return;
+    }
 
     setLoading(true);
 
@@ -35,13 +44,8 @@ export default function RegisterPage() {
       });
       const validateData = await validateRes.json();
 
-      if (!validateData.allowed) {
-        const messages = {
-          not_found: "Este e-mail não está autorizado a participar da liga. Entre em contato com o administrador.",
-          already_used: "Este e-mail já possui uma conta cadastrada na liga.",
-          server_error: "Erro ao verificar autorização. Tente novamente.",
-        };
-        setError(messages[validateData.reason] || "E-mail não autorizado.");
+      if (!validateRes.ok || !validateData.allowed) {
+        setError("Não foi possível concluir o cadastro. Confira os dados ou fale com a administração da liga.");
         setLoading(false);
         return;
       }
@@ -50,41 +54,24 @@ export default function RegisterPage() {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { display_name: displayName } },
+        options: {
+          data: {
+            display_name: displayName.trim(),
+            team_name: teamName.trim(),
+            real_club_name: realClubName.trim(),
+          },
+        },
       });
 
-      if (authError) { setError(authError.message); setLoading(false); return; }
+      if (authError) {
+        setError("Não foi possível concluir o cadastro. Confira os dados ou fale com a administração da liga.");
+        setLoading(false);
+        return;
+      }
       if (!authData?.user) { setError("Ocorreu um erro ao registrar o usuário."); setLoading(false); return; }
 
-      const userId = authData.user.id;
-
-      // 3. Garantir que o perfil existe
-      const { data: existingProfile } = await supabase.from("profiles").select("id").eq("id", userId).maybeSingle();
-      if (!existingProfile) {
-        const { error: profileError } = await supabase.from("profiles").insert([{ id: userId, email, display_name: displayName, role: "user" }]);
-        if (profileError) { setError("Erro ao sincronizar perfil: " + profileError.message); setLoading(false); return; }
-      }
-
-      // 4. Criar o time
-      const { error: teamError } = await supabase.from("teams").insert([{
-        user_id: userId,
-        name: teamName,
-        real_club_name: realClubName,
-        budget: 50000000.00,
-        max_wage_cap: 15000.00,
-      }]);
-
-      if (teamError) { setError("Usuário criado, mas houve erro ao registrar o time: " + teamError.message); setLoading(false); return; }
-
-      // 5. Marcar e-mail como usado na whitelist
-      await fetch("/api/auth/mark-email-used", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase() }),
-      });
-
-      alert("Cadastro realizado com sucesso! Faça login para gerenciar seu time.");
-      router.push("/login");
+      // Perfil, clube e consumo do convite são criados atomicamente pelo trigger.
+      router.push("/login?cadastro=confirmar-email");
     } catch (err) {
       setError("Ocorreu um erro inesperado. Tente novamente.");
       setLoading(false);
@@ -113,7 +100,7 @@ export default function RegisterPage() {
             </div>
           )}
 
-          <form className="space-y-6" onSubmit={handleRegister}>
+          <form noValidate className="space-y-6" onSubmit={handleRegister}>
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               {[
                 { id: "displayName", label: "Nome do Participante", value: displayName, setter: setDisplayName, placeholder: "Ex: João Silva" },
@@ -139,7 +126,7 @@ export default function RegisterPage() {
               ))}
 
               {[
-                { id: "password", label: "Senha", value: password, setter: setPassword, placeholder: "Mínimo 6 caracteres" },
+                { id: "password", label: "Senha", value: password, setter: setPassword, placeholder: "8+ caracteres, letras e números" },
                 { id: "confirmPassword", label: "Confirmar Senha", value: confirmPassword, setter: setConfirmPassword, placeholder: "••••••••" },
               ].map(({ id, label, value, setter, placeholder }) => (
                 <div key={id}>
@@ -168,12 +155,12 @@ export default function RegisterPage() {
             <div className="pt-2">
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || READ_ONLY_MODE}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#10b981] hover:bg-[#059669] py-3 px-4 text-sm font-semibold text-white shadow-lg transition-all duration-250 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:hover:scale-100"
               >
                 {loading ? (
                   <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />Registrando...</>
-                ) : "Finalizar Cadastro"}
+                ) : READ_ONLY_MODE ? "Cadastro temporariamente pausado" : "Finalizar Cadastro"}
               </button>
             </div>
           </form>

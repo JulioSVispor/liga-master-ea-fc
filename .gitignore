@@ -23,6 +23,10 @@
 # misc
 .DS_Store
 *.pem
+*.bak
+backup*.patch
+supabase/temp_*.txt
+.local-backups/
 
 # debug
 npm-debug.log*

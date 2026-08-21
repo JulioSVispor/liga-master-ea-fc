@@ -1,0 +1,4 @@
+-- The repository previously used manually applied SQL files without migration history.
+-- This empty baseline is intentionally non-destructive: a remote schema snapshot must be
+-- generated with `supabase db pull` after the project is linked, before historical SQL is
+-- consolidated. All changes after this point must use a timestamped migration in this folder.

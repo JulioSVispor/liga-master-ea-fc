@@ -421,64 +421,26 @@ export default function AdminArbitrationPage() {
     if (!selectedMatchForWo) return;
     setActionLoading(selectedMatchForWo.id);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const adminUserId = session?.user?.id;
-
-      // 1. Limpar eventos anteriores
+      // 1. Limpar eventos anteriores (mantido no client/RPC por enquanto se houver lógicas atreladas,
+      // mas a Server Action resolve a partida em si)
       await supabase.from("match_events").delete().eq("match_id", selectedMatchForWo.id);
 
-      const hScore = winnerSide === "home" ? 3 : 0;
-      const aScore = winnerSide === "away" ? 3 : 0;
+      // 2. Chama a nova Server Action do Assistente de Arbitragem
+      const { applyWalkover } = await import("@/actions/adminActions");
+      await applyWalkover(selectedMatchForWo.id, winnerSide);
 
-      // 2. Atualizar placar de W.O. (3x0 ou 0x3)
-      const { error: matchError } = await supabase
-        .from("matches")
-        .update({
-          home_score: hScore,
-          away_score: aScore,
-          reported_by: selectedMatchForWo.reported_by || adminUserId,
-          motm_player_id: null,
-          disputed_by: null,
-          dispute_reason: null,
-          dispute_proof_url: null,
-        })
-        .eq("id", selectedMatchForWo.id);
-
-      if (matchError) throw matchError;
-
-      // 3. Confirmar e homologar partida via RPC
+      // 3. Confirmar e homologar partida via RPC (Opcional se a action não fizer)
+      // Como a action apenas define o status como confirmed e muda o score,
+      // rodamos a RPC para ativar as lógicas de suspensão/tabela.
       const { data: rpcData, error: rpcError } = await supabase.rpc("confirm_match", {
         p_match_id: selectedMatchForWo.id
       });
 
       if (rpcError || (rpcData && !rpcData.success)) {
-        throw new Error(rpcError?.message || rpcData?.message || "Falha na homologação do W.O.");
+        throw new Error(rpcError?.message || rpcData?.message || "Falha na homologação pós-WO.");
       }
 
-      // 4. Notificar envolvidos
-      const homeUser = selectedMatchForWo.home_team?.user_id;
-      const awayUser = selectedMatchForWo.away_team?.user_id;
-      const notifications = [];
-      if (homeUser) {
-        notifications.push({
-          user_id: homeUser,
-          title: "W.O. Aplicado pelo Admin",
-          content: `Foi aplicado W.O. no confronto contra o ${selectedMatchForWo.away_team?.name} (${hScore} x ${aScore}).`
-        });
-      }
-      if (awayUser) {
-        notifications.push({
-          user_id: awayUser,
-          title: "W.O. Aplicado pelo Admin",
-          content: `Foi aplicado W.O. no confronto contra o ${selectedMatchForWo.home_team?.name} (${hScore} x ${aScore}).`
-        });
-      }
-
-      if (notifications.length > 0) {
-        await supabase.from("notifications").insert(notifications);
-      }
-
-      triggerAlert("success", "W.O. aplicado com sucesso!");
+      triggerAlert("success", "W.O. aplicado com sucesso via Assistente!");
       setShowWoModal(false);
       setSelectedMatchForWo(null);
       loadData();
@@ -575,7 +537,7 @@ export default function AdminArbitrationPage() {
               {filteredMatches.map(match => (
                 <div
                   key={match.id}
-                  className={`p-6 rounded-2xl bg-[#090d16]/40 border backdrop-blur-md flex flex-col md:flex-row justify-between items-start md:items-center gap-6 transition-all ${
+                  className={`p-6 rounded-2xl bg-[#090d16]/40 border flex flex-col md:flex-row justify-between items-start md:items-center gap-6 transition-all ${
                     match.status === "dispute"
                       ? "border-red-500/30 bg-red-500/5 shadow-md shadow-red-500/5"
                       : "border-white/5"
@@ -662,7 +624,7 @@ export default function AdminArbitrationPage() {
                 const receivePlayers = trade.trade_players?.filter(p => p.direction === "receive") || [];
 
                 return (
-                  <div key={trade.id} className="p-6 rounded-2xl bg-[#090d16]/40 border border-white/5 backdrop-blur-md flex flex-col justify-between gap-6">
+                  <div key={trade.id} className="p-6 rounded-2xl bg-[#090d16]/40 border border-white/5 flex flex-col justify-between gap-6">
                     <div>
                       {/* Título da Proposta */}
                       <div className="flex justify-between items-center border-b border-white/5 pb-3 mb-4">
@@ -766,7 +728,7 @@ export default function AdminArbitrationPage() {
 
       {/* MODAL: Arbitragem de Jogo */}
       {selectedMatch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 overflow-y-auto">
           <div className="w-full max-w-2xl p-6 rounded-2xl bg-[#090d16] border border-white/10 shadow-2xl space-y-6 my-8">
             <div className="flex justify-between items-center border-b border-white/5 pb-4">
               <div>
@@ -781,7 +743,7 @@ export default function AdminArbitrationPage() {
               </button>
             </div>
 
-            <form onSubmit={handleConfirmMatchArbitration} className="space-y-6">
+            <form noValidate onSubmit={handleConfirmMatchArbitration} className="space-y-6">
               {/* Placar */}
               <div className="grid grid-cols-5 items-center gap-2 p-4 rounded-xl bg-[#0d1527]/50 border border-white/5">
                 <div className="col-span-2 text-right font-semibold text-sm truncate text-white">
@@ -953,7 +915,7 @@ export default function AdminArbitrationPage() {
 
       {/* MODAL: Aplicar W.O. */}
       {showWoModal && selectedMatchForWo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 overflow-y-auto">
           <div className="w-full max-w-md p-6 rounded-2xl bg-[#090d16] border border-white/10 shadow-2xl space-y-6">
             <div className="flex justify-between items-center border-b border-white/5 pb-4">
               <h3 className="text-lg font-bold text-white">Decretar W.O.</h3>

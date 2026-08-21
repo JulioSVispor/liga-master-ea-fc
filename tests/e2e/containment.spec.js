@@ -15,3 +15,9 @@ test("rota administrativa não é renderizada sem sessão", async ({ page }) => 
   await page.goto("/admin");
   await expect(page).toHaveURL(/\/login$/);
 });
+
+test("rota de redefinição existe e rejeita acesso sem sessão de recuperação", async ({ page }) => {
+  await page.goto("/reset-password");
+  await expect(page.getByRole("heading", { name: "Criar nova senha" })).toBeVisible();
+  await expect(page.getByText(/link é inválido ou expirou/i)).toBeVisible();
+});

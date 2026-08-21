@@ -2,12 +2,12 @@
 
 import { useId } from "react";
 
-export function FormField({ label, hint, error, required, children }) {
+export function FormField({ label, hint, error, required, htmlFor, children }) {
   const descriptionId = useId();
   return (
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-3">
-        <label className="text-sm font-medium text-gray-200">
+        <label htmlFor={htmlFor} className="text-sm font-medium text-gray-200">
           {label}{required && <span className="ml-1 text-red-400" aria-hidden="true">*</span>}
         </label>
         {hint && <span className="text-xs text-gray-500">{hint}</span>}

@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Button } from "@/components/ui/Button";
+import { FormField } from "@/components/ui/FormField";
 import { supabase } from "@/lib/supabase";
+
+const GENERIC_SUCCESS = "Se o e-mail estiver cadastrado, você receberá um link para criar uma nova senha.";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -10,69 +14,67 @@ export default function ForgotPassword() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleResetPassword = async (e) => {
-    e.preventDefault();
+  const handleResetPassword = async (event) => {
+    event.preventDefault();
     setError("");
     setMessage("");
+
+    if (!email.trim()) {
+      setError("Informe o e-mail da sua conta.");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: `${window.location.origin}/reset-password`,
       });
 
       if (resetError) {
-        setError(resetError.message);
-        setLoading(false);
+        setError("Não foi possível enviar o link agora. Aguarde alguns minutos e tente novamente.");
         return;
       }
 
-      setMessage("E-mail de recuperação enviado com sucesso! Verifique sua caixa de entrada.");
-      setLoading(false);
-    } catch (err) {
-      setError("Ocorreu um erro ao tentar recuperar a senha. Tente novamente.");
+      setMessage(GENERIC_SUCCESS);
+    } catch {
+      setError("Não foi possível enviar o link agora. Aguarde alguns minutos e tente novamente.");
+    } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen flex-col justify-center bg-[#060913] py-12 px-6 lg:px-8 relative overflow-hidden">
-      {/* Luzes de fundo decorativas */}
-      <div className="absolute top-1/4 left-1/4 -z-10 h-72 w-72 rounded-full bg-[#10b981]/10 blur-3xl" />
-      <div className="absolute bottom-1/4 right-1/4 -z-10 h-72 w-72 rounded-full bg-[#3b82f6]/10 blur-3xl" />
+    <main className="flex min-h-screen items-center justify-center bg-[#060913] px-6 py-12">
+      <section className="w-full max-w-md" aria-labelledby="forgot-password-title">
+        <div className="text-center">
+          <Link href="/" className="text-2xl font-extrabold tracking-tight text-white">
+            LIGA <span className="text-[#10b981]">MASTER</span>
+          </Link>
+          <h1 id="forgot-password-title" className="mt-6 text-2xl font-bold tracking-tight text-white">
+            Recupere sua senha
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-gray-400">
+            Informe seu e-mail para receber as instruções de recuperação.
+          </p>
+        </div>
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <Link href="/" className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-[#10b981] to-[#3b82f6] bg-clip-text text-transparent">
-          LIGA MASTER
-        </Link>
-        <h2 className="mt-6 text-center text-2xl font-bold tracking-tight text-white">
-          Recupere sua senha
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-400">
-          Insira seu e-mail abaixo e enviaremos um link de recuperação.
-        </p>
-      </div>
-
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="glass-panel py-8 px-6 shadow-2xl rounded-2xl border border-white/5 bg-[#090d16]/75">
+        <div className="mt-8 rounded-xl border border-white/10 bg-[#090d16] px-6 py-8">
           {error && (
-            <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/30 p-3 text-sm text-red-400">
+            <p className="mb-5 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300" role="alert">
               {error}
-            </div>
+            </p>
           )}
 
           {message && (
-            <div className="mb-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30 p-3 text-sm text-emerald-400">
+            <p className="mb-5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm leading-6 text-emerald-300" role="status">
               {message}
-            </div>
+            </p>
           )}
 
           <form noValidate className="space-y-6" onSubmit={handleResetPassword}>
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-300">
-                E-mail da sua conta
-              </label>
-              <div className="mt-1">
+            <FormField label="E-mail da conta" required htmlFor="email">
+              {(accessibilityProps) => (
                 <input
                   id="email"
                   name="email"
@@ -80,31 +82,26 @@ export default function ForgotPassword() {
                   autoComplete="email"
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full rounded-xl border border-white/10 bg-white/5 py-3 px-4 text-white placeholder-gray-500 focus:border-[#10b981] focus:ring-1 focus:ring-[#10b981] transition-all text-sm outline-none"
-                  placeholder="exemplo@email.com"
+                  onChange={(event) => setEmail(event.target.value)}
+                  className="block min-h-11 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none transition-colors placeholder:text-gray-500 focus:border-[#10b981] focus:ring-2 focus:ring-[#10b981]/25"
+                  placeholder="voce@email.com"
+                  {...accessibilityProps}
                 />
-              </div>
-            </div>
+              )}
+            </FormField>
 
-            <div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex w-full justify-center rounded-xl bg-[#10b981] hover:bg-[#059669] py-3 px-4 text-sm font-semibold text-white shadow-lg transition-all duration-250 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100"
-              >
-                {loading ? "Enviando..." : "Enviar Link de Recuperação"}
-              </button>
-            </div>
+            <Button type="submit" busy={loading} busyLabel="Enviando link…" className="w-full">
+              Enviar link de recuperação
+            </Button>
           </form>
 
           <div className="mt-6 text-center text-sm">
-            <Link href="/login" className="font-semibold text-[#3b82f6] hover:text-blue-400 transition-colors">
+            <Link href="/login" className="font-semibold text-[#3b82f6] transition-colors hover:text-blue-300">
               Voltar para o login
             </Link>
           </div>
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

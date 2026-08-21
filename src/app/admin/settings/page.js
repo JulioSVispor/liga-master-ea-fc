@@ -14,6 +14,7 @@ function Tip({ text }) {
         onMouseLeave={() => setShow(false)}
         onFocus={() => setShow(true)}
         onBlur={() => setShow(false)}
+        onClick={() => setShow((current) => !current)}
         className="text-[11px] text-gray-600 hover:text-gray-400 transition-colors focus:outline-none"
         aria-label="Ajuda"
       >
@@ -703,7 +704,7 @@ export default function AdminSettingsPage() {
 
       {/* Modais de Confirmação Master Reset */}
       {showResetSquads && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
           <div className="w-full max-w-md glass-panel p-6 sm:p-8 rounded-2xl border border-white/10 bg-[#090d16] shadow-2xl space-y-5">
             <h3 className="text-base font-bold text-white">Confirmar Reset de Elencos</h3>
             <p className="text-xs text-gray-400 leading-relaxed">
@@ -736,7 +737,7 @@ export default function AdminSettingsPage() {
       )}
 
       {showResetBudgets && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
           <div className="w-full max-w-md glass-panel p-6 sm:p-8 rounded-2xl border border-white/10 bg-[#090d16] shadow-2xl space-y-5">
             <h3 className="text-base font-bold text-white">Confirmar Reset de Finanças</h3>
             <p className="text-xs text-gray-400 leading-relaxed">
@@ -769,7 +770,7 @@ export default function AdminSettingsPage() {
       )}
 
       {showDeleteClubs && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
           <div className="w-full max-w-md glass-panel p-6 sm:p-8 rounded-2xl border border-red-500/20 bg-[#090d16] shadow-2xl space-y-5">
             <h3 className="text-base font-bold text-white text-red-500 uppercase tracking-wide text-sm">🔥 AÇÃO EXTREMAMENTE CRÍTICA</h3>
             <p className="text-xs text-red-300 leading-relaxed">

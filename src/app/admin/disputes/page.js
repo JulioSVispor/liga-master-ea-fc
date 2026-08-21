@@ -172,7 +172,7 @@ export default function AdminDisputesPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Lista de Disputas */}
           <div className="lg:col-span-2 space-y-4">
-            <div className="p-6 rounded-2xl bg-[#090d16]/40 border border-white/5 backdrop-blur-md">
+            <div className="p-6 rounded-2xl bg-[#090d16]/40 border border-white/5">
               <h2 className="text-lg font-bold text-white mb-4">Jogos em Contestação ({disputes.length})</h2>
               
               <div className="space-y-3">
@@ -237,7 +237,7 @@ export default function AdminDisputesPage() {
           {/* Painel de Resolução */}
           <div>
             {selectedDispute ? (
-              <div className="p-6 rounded-2xl bg-[#090d16]/40 border border-white/5 backdrop-blur-md space-y-6">
+              <div className="p-6 rounded-2xl bg-[#090d16]/40 border border-white/5 space-y-6">
                 <div className="border-b border-white/5 pb-4">
                   <h2 className="text-lg font-bold text-white">Resolver Divergência</h2>
                   <p className="text-xs text-gray-400 mt-1">Avalie os argumentos e prints antes de aplicar uma decisão.</p>
@@ -296,7 +296,7 @@ export default function AdminDisputesPage() {
                   <div className="border-t border-white/5 pt-4 space-y-3">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Forçar Placar Diferente</span>
                     
-                    <form onSubmit={handleForceScoreAndConfirm} className="space-y-3">
+                    <form noValidate onSubmit={handleForceScoreAndConfirm} className="space-y-3">
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="text-[10px] text-gray-400 block mb-1 truncate">{selectedDispute.home_team?.name}</label>
@@ -331,7 +331,7 @@ export default function AdminDisputesPage() {
                 </div>
               </div>
             ) : (
-              <div className="p-6 rounded-2xl bg-[#090d16]/40 border border-white/5 backdrop-blur-md text-center py-12 text-sm text-gray-500">
+              <div className="p-6 rounded-2xl bg-[#090d16]/40 border border-white/5 text-center py-12 text-sm text-gray-500">
                 👉 Selecione uma partida da lista para abrir o painel de mediação.
               </div>
             )}

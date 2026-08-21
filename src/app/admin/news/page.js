@@ -195,7 +195,7 @@ export default function AdminNewsPage() {
           ✍️ Publicar Novo Comunicado/Notícia
         </h2>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form noValidate onSubmit={handleSubmit} className="space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {/* Título da Notícia */}
             <div className="md:col-span-2 space-y-1">
@@ -205,7 +205,7 @@ export default function AdminNewsPage() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Ex: Prazos da Rodada 8 Definidos!"
-                className="w-full bg-[#090d16] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#10b981] transition-colors"
+                className="w-full resize-none bg-[#090d16] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#10b981] transition-colors"
                 maxLength={100}
               />
             </div>
@@ -216,7 +216,7 @@ export default function AdminNewsPage() {
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full bg-[#090d16] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#10b981] transition-colors"
+                className="w-full resize-none bg-[#090d16] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#10b981] transition-colors"
               >
                 {CATEGORIES.map((cat) => (
                   <option key={cat.value} value={cat.value} className="bg-[#090d16] text-white">
@@ -251,7 +251,7 @@ export default function AdminNewsPage() {
                 onChange={(e) => setContent(e.target.value)}
                 rows={3}
                 placeholder="Escreva os detalhes da notícia que os diretores verão no painel principal..."
-                className="w-full bg-[#090d16] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#10b981] transition-colors"
+                className="w-full resize-none bg-[#090d16] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#10b981] transition-colors"
               />
             </div>
           </div>

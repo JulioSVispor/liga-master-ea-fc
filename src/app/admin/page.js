@@ -16,34 +16,29 @@ export default function AdminDashboard() {
   useEffect(() => {
     async function fetchStats() {
       try {
-        // Obter contagem de usuários (profiles)
-        const { count: usersCount, error: usersErr } = await supabase
-          .from("profiles")
-          .select("*", { count: "exact", head: true });
+        // 1. Obter número de exceções / disputas (matches.status = 'dispute')
+        const { count: disputesCount } = await supabase
+          .from("matches")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "dispute");
 
-        // Obter contagem de times (teams)
-        const { count: teamsCount, error: teamsErr } = await supabase
-          .from("teams")
-          .select("*", { count: "exact", head: true });
+        // 2. Obter pendências de Waitlist (waitlist.status = 'pending')
+        const { count: waitlistCount } = await supabase
+          .from("waitlist")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "pending");
 
-        // Obter contagem de jogadores (players)
-        const { count: playersCount, error: playersErr } = await supabase
-          .from("players")
-          .select("*", { count: "exact", head: true });
-
-        // Verificar o status da janela de transferências
-        // Usamos uma tabela/chave genérica em settings (se não existir, tratamos como fechada)
-        const { data: windowSetting, error: settingErr } = await supabase
-          .from("seasons") // Pode ser guardado na temporada ativa ou configurações globais
+        // 3. Status da Janela de Transferências
+        const { data: windowSetting } = await supabase
+          .from("seasons")
           .select("status")
           .limit(1);
 
         const marketWindowOpen = windowSetting && windowSetting.length > 0 && windowSetting[0].status === "active";
 
         setStats({
-          usersCount: usersCount || 0,
-          teamsCount: teamsCount || 0,
-          playersCount: playersCount || 0,
+          disputesCount: disputesCount || 0,
+          waitlistCount: waitlistCount || 0,
           marketWindowOpen: !!marketWindowOpen,
         });
       } catch (err) {
@@ -123,34 +118,41 @@ export default function AdminDashboard() {
         </p>
       </div>
 
-      {/* Grid de Estatísticas */}
+      {/* Controle de Exceções e Triagem (Datadog Style) */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="glass-card p-6 rounded-2xl">
+        {/* Partidas em Disputa */}
+        <a href="/admin/disputes" className={`glass-card p-6 rounded-2xl block transition-all hover:bg-white/[0.02] ${stats.disputesCount > 0 ? "border-red-500/30" : "border-emerald-500/10"}`}>
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-gray-400">Participantes</span>
-            <span className="text-2xl">👥</span>
+            <span className="text-sm font-semibold text-gray-400">Arbitragem / Disputas</span>
+            <span className="text-2xl">{stats.disputesCount > 0 ? "🚨" : "⚖️"}</span>
           </div>
-          <p className="mt-4 text-3xl font-bold text-white">{stats.usersCount}</p>
-          <span className="text-xs text-gray-500 mt-2 block">Participantes ativos cadastrados</span>
-        </div>
+          <p className={`mt-4 text-3xl font-bold ${stats.disputesCount > 0 ? "text-red-400" : "text-white"}`}>{stats.disputesCount}</p>
+          <span className="text-xs text-gray-500 mt-2 block">
+            {stats.disputesCount > 0 ? "Placares contestados aguardando juiz" : "Nenhum conflito de placar"}
+          </span>
+        </a>
 
-        <div className="glass-card p-6 rounded-2xl">
+        {/* Fila de Inscrição */}
+        <a href="/admin/waitlist" className={`glass-card p-6 rounded-2xl block transition-all hover:bg-white/[0.02] ${stats.waitlistCount > 0 ? "border-amber-500/30" : "border-white/5"}`}>
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-gray-400">Equipes Registradas</span>
-            <span className="text-2xl">🛡️</span>
+            <span className="text-sm font-semibold text-gray-400">Lista de Espera</span>
+            <span className="text-2xl">📝</span>
           </div>
-          <p className="mt-4 text-3xl font-bold text-white">{stats.teamsCount}</p>
-          <span className="text-xs text-gray-500 mt-2 block">Times virtuais ativos na liga</span>
-        </div>
+          <p className={`mt-4 text-3xl font-bold ${stats.waitlistCount > 0 ? "text-amber-400" : "text-white"}`}>{stats.waitlistCount}</p>
+          <span className="text-xs text-gray-500 mt-2 block">
+            {stats.waitlistCount > 0 ? "Candidatos aguardando aprovação" : "Nenhum candidato pendente"}
+          </span>
+        </a>
 
-        <div className="glass-card p-6 rounded-2xl col-span-1 sm:col-span-2 lg:col-span-1">
+        {/* Teto Salarial (Placeholder p/ query futura) */}
+        <a href="/admin/audit" className="glass-card p-6 rounded-2xl block transition-all hover:bg-white/[0.02] border-white/5">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-gray-400">Jogadores no Banco de Dados</span>
-            <span className="text-2xl">🏃‍♂️</span>
+            <span className="text-sm font-semibold text-gray-400">Auditoria (Excesso Teto)</span>
+            <span className="text-2xl">💰</span>
           </div>
-          <p className="mt-4 text-3xl font-bold text-white">{stats.playersCount}</p>
-          <span className="text-xs text-gray-500 mt-2 block">Jogadores do EA FC 26 cadastrados</span>
-        </div>
+          <p className="mt-4 text-3xl font-bold text-white">-</p>
+          <span className="text-xs text-gray-500 mt-2 block">Monitoramento de compliance salarial</span>
+        </a>
       </div>
 
       {/* Controle de Janela de Transferência */}

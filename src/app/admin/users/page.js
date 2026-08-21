@@ -47,7 +47,7 @@ function Toast({ message, type, onClose }) {
 function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, confirmText }) {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 animate-fadeIn">
       <div className="w-full max-w-sm glass-panel p-6 rounded-2xl border border-white/10 bg-[#090d16] shadow-2xl space-y-4">
         <div className="space-y-1">
           <h4 className="text-sm font-bold text-white">{title}</h4>
@@ -720,7 +720,7 @@ export default function AdminUsersPage() {
 
       {/* Modal de Finanças */}
       {modalOpen && selectedTeam && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-fadeIn">
           <div className="w-full max-w-md glass-panel p-6 sm:p-8 rounded-2xl border border-white/10 bg-[#090d16] shadow-2xl space-y-6">
             <div className="flex justify-between items-center border-b border-white/5 pb-3">
               <h3 className="text-base font-bold text-white">Ajustar Finanças - {selectedTeam.name}</h3>
@@ -735,7 +735,7 @@ export default function AdminUsersPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveFinances} className="space-y-4">
+            <form noValidate onSubmit={handleSaveFinances} className="space-y-4">
               <div className="space-y-1">
                 <label className="text-xs text-gray-300 font-semibold">Orçamento de Transferências (Saldo R$)</label>
                 <input
@@ -788,7 +788,7 @@ export default function AdminUsersPage() {
 
       {/* Modal de Gerenciamento de Elenco */}
       {squadModalOpen && selectedTeamForSquad && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 overflow-y-auto">
           <div className="w-full max-w-4xl glass-panel p-6 sm:p-8 rounded-2xl border border-white/10 bg-[#090d16] shadow-2xl space-y-6 my-8">
             <div className="flex justify-between items-center border-b border-white/5 pb-3">
               <div>

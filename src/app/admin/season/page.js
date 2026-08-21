@@ -803,7 +803,7 @@ export default function AdminSeasonPage() {
 
       {/* Modal de Confirmação */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="glass-panel w-full max-w-md rounded-2xl border border-red-500/20 bg-[#090d16] p-6 space-y-5 shadow-2xl">
             <div className="text-center space-y-2">
               <div className="w-14 h-14 mx-auto rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">

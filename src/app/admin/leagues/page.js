@@ -596,7 +596,7 @@ export default function AdminLeaguesPage() {
       {activePageTab === "leagues" && (
         <>
           {/* Barra de Seleção Rápida de Ligas */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 rounded-2xl bg-[#090d16]/40 border border-white/5 backdrop-blur-md">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 rounded-2xl bg-[#090d16]/40 border border-white/5">
             <div>
               <label className="block text-xs font-semibold uppercase text-gray-400 tracking-wider mb-2">Temporada Ativa</label>
               <select
@@ -642,7 +642,7 @@ export default function AdminLeaguesPage() {
               {/* Coluna 1 e 2: Gerenciar Times e Rodadas */}
               <div className="lg:col-span-2 space-y-8">
                 {/* Lista de Times Vinculados */}
-                <div className="p-6 rounded-2xl bg-[#090d16]/40 border border-white/5 backdrop-blur-md">
+                <div className="p-6 rounded-2xl bg-[#090d16]/40 border border-white/5">
                   <div className="flex justify-between items-center mb-6">
                     <div>
                       <h2 className="text-xl font-bold text-white">Times na Liga ({leagueTeams.length})</h2>
@@ -704,7 +704,7 @@ export default function AdminLeaguesPage() {
                 </div>
 
                 {/* Gerador e Visualizador de Partidas */}
-                <div className="p-6 rounded-2xl bg-[#090d16]/40 border border-white/5 backdrop-blur-md space-y-6">
+                <div className="p-6 rounded-2xl bg-[#090d16]/40 border border-white/5 space-y-6">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
                       <h2 className="text-xl font-bold text-white">Jogos & Rodadas ({activeMatches.length})</h2>
@@ -807,7 +807,7 @@ export default function AdminLeaguesPage() {
               {/* Coluna 3: Subida/Descida Manual (Acesso) & Infos */}
               <div className="space-y-8">
                 {movingTeam ? (
-                  <div className="p-6 rounded-2xl bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20 backdrop-blur-md space-y-4">
+                  <div className="p-6 rounded-2xl bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20 space-y-4">
                     <h3 className="text-lg font-bold text-amber-400 flex items-center gap-2">
                       🔄 Movimentação Manual
                     </h3>
@@ -815,7 +815,7 @@ export default function AdminLeaguesPage() {
                       Defina o destino do time <strong className="text-white">{movingTeam.teams.name}</strong> para promover, rebaixar ou reposicionar de divisão.
                     </p>
 
-                    <form onSubmit={handleMoveTeam} className="space-y-4">
+                    <form noValidate onSubmit={handleMoveTeam} className="space-y-4">
                       <div>
                         <label className="block text-[10px] font-bold uppercase text-gray-400 mb-1.5">Liga de Destino</label>
                         <select
@@ -853,7 +853,7 @@ export default function AdminLeaguesPage() {
                     </form>
                   </div>
                 ) : (
-                  <div className="p-6 rounded-2xl bg-[#090d16]/40 border border-white/5 backdrop-blur-md space-y-4 text-sm text-gray-400">
+                  <div className="p-6 rounded-2xl bg-[#090d16]/40 border border-white/5 space-y-4 text-sm text-gray-400">
                     <h3 className="font-bold text-white text-base">Regras de Campeonatos</h3>
                     <p className="leading-relaxed text-xs">
                       Como administrador, você tem total autonomia para movimentar equipes ao final da temporada.
@@ -883,7 +883,7 @@ export default function AdminLeaguesPage() {
       {activePageTab === "cups" && (
         <>
           {/* Barra de Seleção Rápida de Copas */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 rounded-2xl bg-[#090d16]/40 border border-white/5 backdrop-blur-md">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 rounded-2xl bg-[#090d16]/40 border border-white/5">
             <div>
               <label className="block text-xs font-semibold uppercase text-gray-400 tracking-wider mb-2">Temporada Ativa</label>
               <select
@@ -922,7 +922,7 @@ export default function AdminLeaguesPage() {
           </div>
 
           {selectedCup ? (
-            <div className="p-6 rounded-2xl bg-[#090d16]/40 border border-white/5 backdrop-blur-md space-y-6">
+            <div className="p-6 rounded-2xl bg-[#090d16]/40 border border-white/5 space-y-6">
               <div className="border-b border-white/5 pb-4">
                 <h2 className="text-xl font-bold text-white">Chaves & Resultados: {selectedCup}</h2>
                 <p className="text-xs text-gray-400 mt-0.5">Acompanhe as fases eliminatórias do torneio.</p>
@@ -1227,13 +1227,13 @@ export default function AdminLeaguesPage() {
 
       {/* MODAL: Nova Temporada */}
       {showSeasonModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 animate-fade-in">
           <div className="w-full max-w-md p-6 rounded-2xl bg-[#090d16] border border-white/10 shadow-2xl space-y-6">
             <div className="flex justify-between items-center border-b border-white/5 pb-4">
               <h3 className="text-lg font-bold text-white">Criar Nova Temporada</h3>
               <button onClick={() => setShowSeasonModal(false)} className="text-gray-400 hover:text-white text-lg">✕</button>
             </div>
-            <form onSubmit={handleCreateSeason} className="space-y-4">
+            <form noValidate onSubmit={handleCreateSeason} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-400 mb-1">Nome da Temporada</label>
                 <input
@@ -1270,13 +1270,13 @@ export default function AdminLeaguesPage() {
 
       {/* MODAL: Nova Divisão/Liga */}
       {showLeagueModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75">
           <div className="w-full max-w-md p-6 rounded-2xl bg-[#090d16] border border-white/10 shadow-2xl space-y-6">
             <div className="flex justify-between items-center border-b border-white/5 pb-4">
               <h3 className="text-lg font-bold text-white">Criar Nova Divisão / Liga</h3>
               <button onClick={() => setShowLeagueModal(false)} className="text-gray-400 hover:text-white text-lg">✕</button>
             </div>
-            <form onSubmit={handleCreateLeague} className="space-y-4">
+            <form noValidate onSubmit={handleCreateLeague} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-400 mb-1">Nome da Divisão</label>
                 <input
@@ -1322,7 +1322,7 @@ export default function AdminLeaguesPage() {
 
       {/* MODAL: Adicionar Time */}
       {showTeamModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75">
           <div className="w-full max-w-lg p-6 rounded-2xl bg-[#090d16] border border-white/10 shadow-2xl space-y-6">
             <div className="flex justify-between items-center border-b border-white/5 pb-4">
               <div>
@@ -1370,13 +1370,13 @@ export default function AdminLeaguesPage() {
       )}
       {/* MODAL: Criar Copa Mata-Mata */}
       {showCupModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 animate-fade-in">
           <div className="w-full max-w-md p-6 rounded-2xl bg-[#090d16] border border-white/10 shadow-2xl space-y-6">
             <div className="flex justify-between items-center border-b border-white/5 pb-4">
               <h3 className="text-lg font-bold text-white">Criar Nova Copa / Playoff</h3>
               <button onClick={() => setShowCupModal(false)} className="text-gray-400 hover:text-white text-lg">✕</button>
             </div>
-            <form onSubmit={handleGenerateCup} className="space-y-4">
+            <form noValidate onSubmit={handleGenerateCup} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-400 mb-1">Nome do Torneio / Copa</label>
                 <input

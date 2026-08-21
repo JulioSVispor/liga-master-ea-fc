@@ -123,7 +123,7 @@ export default function AdminSponsorshipsPage() {
       <div className="glass-panel rounded-2xl border border-white/5 bg-[#090d16]/75 p-6 sm:p-8 space-y-5">
         <h2 className="text-lg font-bold text-white border-b border-white/5 pb-3">Novo Patrocínio</h2>
         <Feedback msg={msgCreate} />
-        <form onSubmit={handleCreate} className="space-y-4">
+        <form noValidate onSubmit={handleCreate} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-gray-300">Nome do Patrocinador *</label>

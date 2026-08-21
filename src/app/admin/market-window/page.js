@@ -19,7 +19,7 @@ export default function MarketWindowPage() {
     try {
       const { data, error } = await supabase
         .from("seasons")
-        .select("id, name, status, market_open, start_date, end_date")
+        .select("id, name, status, market_open")
         .eq("status", "active")
         .maybeSingle();
 

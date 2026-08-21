@@ -103,7 +103,7 @@ export default function AdminLayout({ children }) {
     <div className="flex min-h-screen bg-[#060913] text-gray-100">
 
       {/* ── SIDEBAR DESKTOP ── */}
-      <aside className="w-64 border-r border-white/5 bg-[#090d16]/80 backdrop-blur-md hidden md:flex flex-col flex-shrink-0">
+      <aside className="w-64 border-r border-white/5 bg-[#090d16]/80 hidden md:flex flex-col flex-shrink-0">
         {/* Logo */}
         <div className="h-16 flex items-center px-6 border-b border-white/5">
           <Link href="/" className="text-xl font-bold bg-gradient-to-r from-[#10b981] to-[#3b82f6] bg-clip-text text-transparent">
@@ -188,7 +188,7 @@ export default function AdminLayout({ children }) {
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
 
         {/* Header mobile */}
-        <header className="h-16 border-b border-white/5 bg-[#090d16]/80 flex items-center justify-between px-4 md:hidden sticky top-0 z-30 backdrop-blur-md">
+        <header className="h-16 border-b border-white/5 bg-[#090d16]/80 flex items-center justify-between px-4 md:hidden sticky top-0 z-30">
           <span className="text-lg font-bold bg-gradient-to-r from-[#10b981] to-[#3b82f6] bg-clip-text text-transparent">
             LIGA ADMIN
           </span>
@@ -208,7 +208,7 @@ export default function AdminLayout({ children }) {
 
         {/* Menu mobile dropdown */}
         {mobileMenuOpen && (
-          <div className="md:hidden bg-[#090d16]/95 border-b border-white/5 p-3 space-y-1 z-20 backdrop-blur-md">
+          <div className="md:hidden bg-[#090d16]/95 border-b border-white/5 p-3 space-y-1 z-20">
             {MENU_GROUPS.map((group, gi) => (
               <div key={gi} className={gi > 0 ? "pt-2" : ""}>
                 {group.label && (

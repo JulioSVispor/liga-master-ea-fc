@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { requireAdminUser } from "@/lib/supabase/route-auth";
 
 export async function GET(request) {
+  const authorization = await requireAdminUser();
+  if (authorization.error) {
+    return NextResponse.json({ success: false, message: authorization.error }, { status: authorization.status });
+  }
+
   const { searchParams } = new URL(request.url);
   const offset = parseInt(searchParams.get("offset") || "0");
   const limit = parseInt(searchParams.get("limit") || "100");
   const multiplier = parseInt(searchParams.get("multiplier") || "10");
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  const { serviceClient: supabase } = authorization;
 
   try {
     // 1. Chamar a API oficial de ratings da EA Sports FC

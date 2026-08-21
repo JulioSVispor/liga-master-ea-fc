@@ -11,9 +11,6 @@ export default function AdminImport() {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("");
   const [errorLogs, setErrorLogs] = useState([]);
-  const [teamId, setTeamId] = useState("");
-  const [teamImporting, setTeamImporting] = useState(false);
-  const [teamStatus, setTeamStatus] = useState("");
   const [eaImporting, setEaImporting] = useState(false);
   const [eaProgress, setEaProgress] = useState(0);
   const [eaStatus, setEaStatus] = useState("");
@@ -26,29 +23,6 @@ export default function AdminImport() {
     }
   };
 
-  const handleTeamImport = async (e) => {
-    e.preventDefault();
-    if (!teamId.trim()) return;
-
-    setTeamImporting(true);
-    setTeamStatus("Consultando SoFIFA e salvando jogadores no banco...");
-
-    try {
-      const res = await fetch(`/api/sofifa/sync-team?id=${teamId.trim()}`);
-      const data = await res.json();
-
-      if (data.success) {
-        setTeamStatus(`Sucesso: ${data.message}`);
-        setTeamId("");
-      } else {
-        setTeamStatus(`Erro: ${data.message || "Falha na sincronização."}`);
-      }
-    } catch (err) {
-      setTeamStatus(`Erro de rede: ${err.message}`);
-    } finally {
-      setTeamImporting(false);
-    }
-  };
 
   const handleEAImport = async () => {
     const confirmImport = window.confirm(
@@ -330,48 +304,6 @@ export default function AdminImport() {
             </div>
           )}
 
-          {/* Painel de Importação por ID de Time */}
-          <div className="glass-panel p-8 rounded-2xl border border-white/5 bg-[#090d16]/75">
-            <h3 className="text-lg font-bold text-white mb-2">Importar Elenco Completo do SoFIFA</h3>
-            <p className="text-xs text-gray-400 mb-6 leading-relaxed">
-              Você pode importar ou atualizar todos os jogadores de um clube específico informando o ID do time no SoFIFA. 
-              <span className="block mt-1.5 text-gray-500 font-medium">
-                💡 Como descobrir o ID do time: Vá no site do SoFIFA (<a href="https://sofifa.com" target="_blank" rel="noreferrer" className="text-[#10b981] hover:underline">sofifa.com</a>), busque pelo clube desejado e copie o número que aparece na URL. Exemplo: em <code className="text-gray-400 bg-white/5 px-1 py-0.5 rounded">https://sofifa.com/team/241/real-madrid/</code> o ID é <strong className="text-white">241</strong>.
-              </span>
-            </p>
-
-            <form onSubmit={handleTeamImport} className="space-y-4">
-              <div>
-                <label htmlFor="teamId" className="block text-sm font-semibold text-gray-300 mb-2">
-                  ID do Time no SoFIFA:
-                </label>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <input
-                    id="teamId"
-                    type="text"
-                    placeholder="Ex: 241"
-                    value={teamId}
-                    onChange={(e) => setTeamId(e.target.value)}
-                    disabled={teamImporting}
-                    className="w-full sm:max-w-xs rounded-xl border border-white/10 bg-white/5 py-2.5 px-4 text-white focus:border-[#10b981] outline-none text-sm"
-                  />
-                  <button
-                    type="submit"
-                    disabled={teamImporting || !teamId.trim()}
-                    className="rounded-xl bg-gradient-to-r from-[#10b981] to-[#3b82f6] px-6 py-2.5 text-xs font-bold text-white shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
-                  >
-                    {teamImporting ? "Importando..." : "Importar Elenco"}
-                  </button>
-                </div>
-              </div>
-            </form>
-
-            {teamStatus && (
-              <div className="mt-4 p-4 rounded-xl bg-white/5 border border-white/5 text-xs text-gray-300">
-                {teamStatus}
-              </div>
-            )}
-          </div>
 
           {/* Painel de Importação Oficial da EA */}
           <div className="glass-panel p-8 rounded-2xl border border-white/5 bg-[#090d16]/75">
@@ -386,7 +318,7 @@ export default function AdminImport() {
             <div className="space-y-4">
               <button
                 onClick={handleEAImport}
-                disabled={eaImporting || parsing || teamImporting}
+                disabled={eaImporting || parsing}
                 className="w-full sm:w-auto rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-8 py-3.5 text-xs font-bold text-white shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100"
               >
                 {eaImporting ? "Importando base..." : "Importar Base da EA (15k+ Jogadores)"}

@@ -311,13 +311,13 @@ export default function AdminAuditPage() {
         <div className="space-y-8">
           {/* Grid de KPIs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-5 rounded-2xl border border-white/5 bg-[#090d16]/40 backdrop-blur-md space-y-2">
+            <div className="p-5 rounded-2xl border border-white/5 bg-[#090d16]/40 space-y-2">
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Total de Registros</p>
               <p className="text-2xl font-extrabold text-white">{kpis.totalCount}</p>
               <span className="text-[10px] text-gray-500">Gravados no histórico</span>
             </div>
 
-            <div className="p-5 rounded-2xl border border-white/5 bg-[#090d16]/40 backdrop-blur-md space-y-2">
+            <div className="p-5 rounded-2xl border border-white/5 bg-[#090d16]/40 space-y-2">
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Volume Transacionado</p>
               <p className="text-2xl font-extrabold text-emerald-400">
                 R$ {kpis.totalVolume.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
@@ -325,7 +325,7 @@ export default function AdminAuditPage() {
               <span className="text-[10px] text-emerald-500/70">Volume monetário negociado</span>
             </div>
 
-            <div className="p-5 rounded-2xl border border-white/5 bg-[#090d16]/40 backdrop-blur-md space-y-2">
+            <div className="p-5 rounded-2xl border border-white/5 bg-[#090d16]/40 space-y-2">
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Maior Transação</p>
               <p className="text-2xl font-extrabold text-purple-400">
                 R$ {kpis.maxAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
@@ -333,7 +333,7 @@ export default function AdminAuditPage() {
               <span className="text-[10px] text-purple-500/70">Maior transferência comercial</span>
             </div>
 
-            <div className="p-5 rounded-2xl border border-white/5 bg-[#090d16]/40 backdrop-blur-md space-y-2">
+            <div className="p-5 rounded-2xl border border-white/5 bg-[#090d16]/40 space-y-2">
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Média por Contrato</p>
               <p className="text-2xl font-extrabold text-blue-400">
                 R$ {kpis.avgAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
@@ -517,7 +517,7 @@ export default function AdminAuditPage() {
             </p>
           </div>
 
-          <form onSubmit={handleApplyAction} className="space-y-5">
+          <form noValidate onSubmit={handleApplyAction} className="space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               {/* Selecionar Time */}
               <div className="space-y-1">

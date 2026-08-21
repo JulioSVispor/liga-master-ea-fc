@@ -151,7 +151,7 @@ export default function AdminTrophiesPage() {
       <div className="glass-panel rounded-2xl border border-white/5 bg-[#090d16]/75 p-6 sm:p-8 space-y-5">
         <h2 className="text-lg font-bold text-white border-b border-white/5 pb-3">Novo Troféu</h2>
         <Feedback msg={msgCreate} />
-        <form onSubmit={handleCreate} className="space-y-4">
+        <form noValidate onSubmit={handleCreate} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-gray-300">Nome do Troféu *</label>
@@ -262,7 +262,7 @@ export default function AdminTrophiesPage() {
 
       {/* Modal Atribuição */}
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="glass-panel w-full max-w-md rounded-2xl border border-white/10 bg-[#090d16] p-6 space-y-5 shadow-2xl">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-white">
@@ -276,7 +276,7 @@ export default function AdminTrophiesPage() {
               </button>
             </div>
             <Feedback msg={msgAssign} />
-            <form onSubmit={handleAssign} className="space-y-4">
+            <form noValidate onSubmit={handleAssign} className="space-y-4">
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-gray-300">Time *</label>
                 <select

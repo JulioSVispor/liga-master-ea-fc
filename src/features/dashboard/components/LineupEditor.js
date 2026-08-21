@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 
 const FORMATIONS = {
@@ -160,10 +161,17 @@ export default function LineupEditor({ team, players, onTeamUpdate }) {
     });
   };
 
+  const fieldPlayers = getFormationSlots();
+  const fieldPlayerIds = fieldPlayers.map((s) => s.player?.id).filter(Boolean);
+  const benchPlayers = players.filter((p) => !fieldPlayerIds.includes(p.id));
+
   const handleFormationChange = async (newFormation) => {
     setSavingFormation(true);
     try {
-      const { error } = await supabase.from("teams").update({ formation: newFormation }).eq("id", team.id);
+      const { error } = await supabase.rpc("update_team_tactics", {
+        p_formation: newFormation,
+        p_lineup: Array.isArray(team.lineup) ? team.lineup : [],
+      });
       if (!error) onTeamUpdate({ ...team, formation: newFormation });
     } catch (err) {
       console.error("Erro ao salvar formação:", err);
@@ -180,13 +188,28 @@ export default function LineupEditor({ team, players, onTeamUpdate }) {
       let targetLineup = isLineupEmpty ? fieldPlayers.map((s) => s.player?.id || null) : currentLineup;
 
       const existingIndex = targetLineup.findIndex((id) => id && id.toString() === player.id.toString());
-      if (existingIndex !== -1) targetLineup[existingIndex] = targetLineup[slotIndex] || null;
+      const playerCurrentlyInSlot = targetLineup[slotIndex] || null;
+
+      if (existingIndex !== -1) {
+        // O jogador já estava no campo. Vamos colocar o jogador do slot de destino no slot antigo dele.
+        targetLineup[existingIndex] = playerCurrentlyInSlot;
+      }
       targetLineup[slotIndex] = player.id;
 
-      const { error } = await supabase.from("teams").update({ lineup: targetLineup }).eq("id", team.id);
-      if (!error) onTeamUpdate({ ...team, lineup: targetLineup });
+      // Otimista
+      onTeamUpdate({ ...team, lineup: targetLineup });
+
+      const { error } = await supabase.rpc("update_team_tactics", {
+        p_formation: team.formation || "4-3-3",
+        p_lineup: targetLineup,
+      });
+      if (error) {
+        console.error("Erro Supabase:", error);
+        alert("Erro ao salvar escalação: " + error.message);
+      }
     } catch (err) {
       console.error("Erro ao salvar escalação:", err);
+      alert("Erro ao processar escalação.");
     } finally {
       setSavingEscalation(false);
     }
@@ -197,7 +220,10 @@ export default function LineupEditor({ team, players, onTeamUpdate }) {
     try {
       const currentLineup = Array.isArray(team.lineup) ? [...team.lineup] : fieldPlayers.map((s) => s.player?.id || null);
       currentLineup[slotIndex] = null;
-      const { error } = await supabase.from("teams").update({ lineup: currentLineup }).eq("id", team.id);
+      const { error } = await supabase.rpc("update_team_tactics", {
+        p_formation: team.formation || "4-3-3",
+        p_lineup: currentLineup,
+      });
       if (!error) onTeamUpdate({ ...team, lineup: currentLineup });
     } catch (err) {
       console.error("Erro ao remover jogador:", err);
@@ -206,9 +232,7 @@ export default function LineupEditor({ team, players, onTeamUpdate }) {
     }
   };
 
-  const fieldPlayers = getFormationSlots();
-  const fieldPlayerIds = fieldPlayers.map((s) => s.player?.id).filter(Boolean);
-  const benchPlayers = players.filter((p) => !fieldPlayerIds.includes(p.id));
+
 
   return (
     <div className="glass-panel p-6 sm:p-8 rounded-2xl border border-white/5 bg-[#090d16]/75 space-y-6">
@@ -276,16 +300,20 @@ export default function LineupEditor({ team, players, onTeamUpdate }) {
                   {slot.player ? (
                     <div
                       draggable
-                      onDragStart={(e) => { setDraggingPlayer(slot.player); e.dataTransfer.effectAllowed = "move"; }}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("text/plain", slot.player.id.toString());
+                        setDraggingPlayer(slot.player);
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
                       onDragEnd={() => { setDraggingPlayer(null); setDragOverSlot(null); }}
                       onDoubleClick={() => handleRemovePlayerFromSlot(index)}
                       className={`flex flex-col items-center animate-fadeIn relative cursor-grab active:cursor-grabbing transition-all duration-200 ${draggingPlayer?.id === slot.player?.id ? "opacity-40" : "opacity-100"}`}
                     >
                       <div className={`relative h-14 w-14 sm:h-16 sm:w-16 rounded-xl bg-[#090d16]/90 flex items-center justify-center overflow-hidden shadow-lg transition-all duration-200 ${isHovered ? "border-2 border-[#10b981] scale-110 shadow-[0_0_12px_#10b981aa]" : "border border-white/20 group-hover:scale-105 group-hover:border-[#10b981]/50"}`}>
-                        <span className="absolute top-1 left-1.5 text-[10px] font-black bg-[#060913]/85 rounded px-1 leading-none shadow-sm z-10 text-[#10b981]">{slot.player.rating}</span>
+                        <span className="absolute top-1 left-1 text-[10px] font-black bg-[#060913]/85 rounded px-1 leading-none shadow-sm z-10 text-[#10b981]">{slot.player.rating}</span>
                         <span className="absolute bottom-1 right-1 text-[8px] font-bold text-gray-300 bg-[#060913]/85 rounded px-1 leading-none uppercase z-10">{slot.title}</span>
                         {slot.player.face_url ? (
-                          <img src={slot.player.face_url} alt={slot.player.name} className="h-full w-full object-cover scale-110" draggable={false} />
+                          <img src={slot.player.face_url} alt={slot.player.name} className="h-full w-full object-contain object-bottom" draggable={false} />
                         ) : (
                           <span className="text-xl">👤</span>
                         )}
@@ -322,7 +350,11 @@ export default function LineupEditor({ team, players, onTeamUpdate }) {
                   <div
                     key={player.id}
                     draggable
-                    onDragStart={(e) => { setDraggingPlayer(player); e.dataTransfer.effectAllowed = "move"; }}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/plain", player.id.toString());
+                      setDraggingPlayer(player);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
                     onDragEnd={() => { setDraggingPlayer(null); setDragOverSlot(null); }}
                     title={`${player.name} — Arraste para escalar`}
                     className={`glass-card flex-shrink-0 w-20 p-2.5 rounded-xl border border-white/5 flex flex-col items-center justify-between text-center bg-[#090d16]/30 relative cursor-grab active:cursor-grabbing transition-all hover:border-[#10b981]/30 hover:bg-white/5 ${draggingPlayer?.id === player.id ? "opacity-40" : "opacity-100"}`}
@@ -330,7 +362,7 @@ export default function LineupEditor({ team, players, onTeamUpdate }) {
                     <span className="absolute top-1.5 left-1.5 text-[9px] font-extrabold text-[#10b981] bg-[#060913]/80 px-1 rounded leading-none">{player.rating}</span>
                     <span className="absolute top-1.5 right-1.5 text-[7px] font-bold text-gray-400 uppercase bg-[#060913]/80 px-1 rounded leading-none">{player.position}</span>
                     <div className="h-11 w-11 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden mt-3 mb-1">
-                      {player.face_url ? <img src={player.face_url} alt="" className="h-full w-full object-cover scale-110" draggable={false} /> : <span className="text-lg">👤</span>}
+                      {player.face_url ? <img src={player.face_url} alt="" className="h-full w-full object-contain object-bottom" draggable={false} /> : <span className="text-lg">👤</span>}
                     </div>
                     <p className="text-[9px] font-bold text-white truncate w-full text-center leading-tight">{player.name.split(" ").slice(-1)[0]}</p>
                     <p className="text-[7px] text-gray-500 mt-0.5">arrastar ↑</p>

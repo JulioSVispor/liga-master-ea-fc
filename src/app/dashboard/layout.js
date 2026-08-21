@@ -5,50 +5,26 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
+import { useNotifications } from "@/hooks/useNotifications";
+import { useTeamFinancials } from "@/hooks/useTeamFinancials";
+
 export default function UserDashboardLayout({ children }) {
   const router = useRouter();
   const pathname = usePathname();
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState(null);
   const [team, setTeam] = useState(null);
-  const [wageSum, setWageSum] = useState(0);
-
-  // Estados de Notificações (Fase 4)
-  const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [activeToast, setActiveToast] = useState(null);
 
-  // Buscar notificações do usuário
-  const loadNotifications = async (userId) => {
-    try {
-      const { data, error } = await supabase
-        .from("notifications")
-        .select("*")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(15);
-      
-      if (error) throw error;
-      setNotifications(data || []);
-    } catch (err) {
-      console.error("Erro ao carregar notificações:", err);
-    }
-  };
+  const {
+    notifications,
+    unreadCount,
+    activeToast,
+    setActiveToast,
+    markAllRead
+  } = useNotifications(userProfile?.id);
 
-  const handleMarkAllRead = async () => {
-    if (!userProfile) return;
-    try {
-      const { error } = await supabase
-        .from("notifications")
-        .update({ read: true })
-        .eq("user_id", userProfile.id);
-      
-      if (error) throw error;
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    } catch (err) {
-      console.error("Erro ao marcar lidas:", err);
-    }
-  };
+  const { wageSum, wageCapPercent } = useTeamFinancials(team?.id);
 
   useEffect(() => {
     async function loadData() {
@@ -68,28 +44,16 @@ export default function UserDashboardLayout({ children }) {
           .single();
  
         setUserProfile(profile);
-        if (profile) {
-          await loadNotifications(profile.id);
-        }
- 
+
         // Carregar Time
         const { data: teamData } = await supabase
           .from("teams")
           .select("*")
           .eq("user_id", session.user.id)
           .single();
- 
+
         if (teamData) {
           setTeam(teamData);
- 
-          // Calcular soma dos salários do elenco do time
-          const { data: players } = await supabase
-            .from("players")
-            .select("wage")
-            .eq("team_id", teamData.id);
- 
-          const totalWages = players ? players.reduce((sum, p) => sum + parseFloat(p.wage || 0), 0) : 0;
-          setWageSum(totalWages);
         }
       } catch (err) {
         console.error("Erro ao carregar dados do painel:", err);
@@ -101,49 +65,7 @@ export default function UserDashboardLayout({ children }) {
     loadData();
   }, [router, pathname]);
 
-  // Realtime para Notificações & Toasts instantâneos
-  useEffect(() => {
-    if (!userProfile) return;
-
-    // Subscrever canal Realtime
-    const channel = supabase
-      .channel(`user-notifications-${userProfile.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${userProfile.id}`,
-        },
-        (payload) => {
-          // 1. Recarregar notificações
-          loadNotifications(userProfile.id);
-
-          // 2. Disparar Toast na Tela
-          setActiveToast({
-            title: payload.new.title,
-            content: payload.new.content,
-          });
-
-          // 3. Auto-ocultar após 6 segundos
-          setTimeout(() => {
-            setActiveToast(null);
-          }, 6000);
-        }
-      )
-      .subscribe();
-
-    // Polling de 20s como Fallback
-    const interval = setInterval(() => {
-      loadNotifications(userProfile.id);
-    }, 20000);
-
-    return () => {
-      supabase.removeChannel(channel);
-      clearInterval(interval);
-    };
-  }, [userProfile]);
+  // A lógica de Realtime foi movida para useNotifications
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -162,23 +84,19 @@ export default function UserDashboardLayout({ children }) {
   }
 
   const menuItems = [
-    { name: "Meu Clube", path: "/dashboard", icon: "🛡️" },
-    { name: "Olheiro / Scout", path: "/dashboard/scouting", icon: "🏃‍♂️" },
-    { name: "Mercado", path: "/dashboard/market", icon: "💱" },
-    { name: "Partidas", path: "/dashboard/matches", icon: "⚽" },
+    { name: "Painel do Clube", path: "/dashboard", icon: "🛡️" },
+    { name: "Mural de Notícias", path: "/dashboard/news", icon: "📰" },
+    { name: "Mercado de Atletas", path: "/dashboard/scouting", icon: "💱" },
+    { name: "Central de Transferências", path: "/dashboard/market", icon: "🤝" },
+    { name: "Partidas & Calendário", path: "/dashboard/matches", icon: "⚽" },
     { name: "Classificação", path: "/dashboard/standings", icon: "📈" },
-    { name: "Histórico", path: "/dashboard/negotiations", icon: "📋" },
-    { name: "Perfil", path: "/dashboard/profile", icon: "⚙️" },
+    { name: "Extrato Financeiro", path: "/dashboard/negotiations", icon: "📋" },
   ];
-
-  // Calcular porcentagem do teto de salários
-  const wageCapPercent = team ? Math.min(Math.round((wageSum / parseFloat(team.max_wage_cap)) * 100), 100) : 0;
-  const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
     <div className="flex min-h-screen bg-[#060913] text-gray-100">
       {/* Sidebar */}
-      <aside className="w-68 border-r border-white/5 bg-[#090d16]/80 backdrop-blur-md hidden lg:flex flex-col">
+      <aside className="w-68 border-r border-white/5 bg-[#090d16]/80 hidden lg:flex flex-col">
         <div className="h-16 flex items-center px-6 border-b border-white/5 justify-between gap-1">
           <Link href="/" className="text-base font-bold bg-gradient-to-r from-[#10b981] to-[#3b82f6] bg-clip-text text-transparent">
             LIGA MASTER
@@ -200,12 +118,12 @@ export default function UserDashboardLayout({ children }) {
               </button>
               
               {showNotifications && (
-                <div className="absolute left-0 mt-2 w-72 rounded-xl border border-white/10 bg-[#090d16]/95 backdrop-blur-md shadow-2xl p-3 z-50 text-left">
+                <div className="absolute left-0 mt-2 w-72 rounded-xl border border-white/10 bg-[#090d16]/95 shadow-2xl p-3 z-50 text-left">
                   <div className="flex justify-between items-center border-b border-white/5 pb-2 mb-2">
                     <span className="text-[10px] font-bold text-white">Notificações</span>
                     {unreadCount > 0 && (
                       <button
-                        onClick={handleMarkAllRead}
+                        onClick={markAllRead}
                         className="text-[8.5px] text-[#10b981] hover:text-[#059669] font-bold"
                       >
                         Lidas
@@ -261,30 +179,27 @@ export default function UserDashboardLayout({ children }) {
               )}
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-white truncate">{team.name}</p>
-                <p className="text-xs text-gray-400 truncate">{team.real_club_name}</p>
               </div>
             </div>
 
             {/* Finanças rápidas */}
-            <div className="space-y-3 pt-2">
+            <div className="space-y-4 pt-2">
               {/* Orçamento */}
-              <div>
-                <div className="flex justify-between text-xs text-gray-400 mb-0.5">
-                  <span>Orçamento Saldo</span>
-                  <span className="font-semibold text-emerald-400">
-                    R$ {parseFloat(team.budget).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
+              <div className="flex flex-col text-xs text-gray-400">
+                <span>Orçamento Disponível</span>
+                <span className="font-bold text-emerald-400 text-[13px] mt-0.5">
+                  R$ {parseFloat(team.budget).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                </span>
               </div>
 
               {/* Teto Salarial */}
-              <div>
-                <div className="flex justify-between text-xs text-gray-400 mb-1">
+              <div className="flex flex-col text-xs text-gray-400">
+                <div className="flex justify-between mb-1">
                   <span>Folha Salarial (Teto)</span>
-                  <span className={`font-semibold ${wageSum > team.max_wage_cap ? "text-red-400" : "text-gray-200"}`}>
-                    {wageSum.toLocaleString("pt-BR")} / {parseFloat(team.max_wage_cap).toLocaleString("pt-BR")}
-                  </span>
                 </div>
+                <span className={`font-bold text-[13px] mb-1.5 ${wageSum > team.max_wage_cap ? "text-red-400" : "text-gray-200"}`}>
+                  R$ {wageSum.toLocaleString("pt-BR")} <span className="text-gray-500 font-normal">/ {parseFloat(team.max_wage_cap).toLocaleString("pt-BR")}</span>
+                </span>
                 <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${
@@ -327,9 +242,15 @@ export default function UserDashboardLayout({ children }) {
             </Link>
           )}
         </nav>
-
-        {/* Logout */}
-        <div className="p-4 border-t border-white/5">
+        {/* Footer Sidebar (Profile & Logout) */}
+        <div className="p-4 border-t border-white/5 space-y-2">
+          <Link
+            href="/dashboard/profile"
+            className="flex w-full items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all"
+          >
+            <span>⚙️</span>
+            Configurações
+          </Link>
           <button
             onClick={handleLogout}
             className="flex w-full items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition-all"
@@ -363,12 +284,12 @@ export default function UserDashboardLayout({ children }) {
               </button>
               
               {showNotifications && (
-                <div className="absolute right-0 mt-2 w-72 rounded-xl border border-white/10 bg-[#090d16]/95 backdrop-blur-md shadow-2xl p-3 z-50 text-left">
+                <div className="absolute right-0 mt-2 w-72 rounded-xl border border-white/10 bg-[#090d16]/95 shadow-2xl p-3 z-50 text-left">
                   <div className="flex justify-between items-center border-b border-white/5 pb-2 mb-2">
                     <span className="text-[10px] font-bold text-white">Notificações</span>
                     {unreadCount > 0 && (
                       <button
-                        onClick={handleMarkAllRead}
+                        onClick={markAllRead}
                         className="text-[8.5px] text-[#10b981] hover:text-[#059669] font-bold"
                       >
                         Lidas
@@ -397,13 +318,19 @@ export default function UserDashboardLayout({ children }) {
             </div>
 
             {team && (
-              <span className="text-xs font-bold text-emerald-400 bg-emerald-400/10 px-2.5 py-1 rounded-full">
+              <span className="text-xs font-bold text-emerald-400 bg-emerald-400/10 px-2.5 py-1 rounded-full border border-emerald-400/20">
                 R$ {(team.budget / 1e6).toFixed(1)}M
               </span>
             )}
+            <Link
+              href="/dashboard/profile"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-white bg-white/5 border border-white/5 transition-colors"
+            >
+              ⚙️
+            </Link>
             <button
               onClick={handleLogout}
-              className="text-xs font-semibold text-red-400 px-3 py-1.5 rounded-lg bg-red-500/10"
+              className="text-xs font-bold text-red-400 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 transition-colors"
             >
               Sair
             </button>
@@ -445,7 +372,7 @@ export default function UserDashboardLayout({ children }) {
 
         {/* Toast flutuante Realtime */}
         {activeToast && (
-          <div className="fixed bottom-5 right-5 z-50 max-w-sm rounded-xl border border-emerald-500/30 bg-[#090d16]/90 backdrop-blur-md p-4 shadow-2xl animate-slideIn flex gap-3 items-start border-l-4 border-l-[#10b981]">
+          <div className="fixed bottom-5 right-5 z-50 max-w-sm rounded-xl border border-emerald-500/30 bg-[#090d16]/90 p-4 shadow-2xl animate-slideIn flex gap-3 items-start border-l-4 border-l-[#10b981]">
             <div className="text-[#10b981] text-base flex-shrink-0 pt-0.5">🔔</div>
             <div className="min-w-0 flex-1 space-y-0.5">
               <h4 className="text-xs font-bold text-white leading-tight">{activeToast.title}</h4>

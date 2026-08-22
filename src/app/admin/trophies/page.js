@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { adminCommandService } from "@/services/adminCommandService";
 
 const INPUT_STYLE =
   "w-full bg-[#090d16] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#10b981] transition-colors";
@@ -76,26 +77,13 @@ export default function AdminTrophiesPage() {
     if (!form.name) return;
     setCreating(true);
     try {
-      let image_url = null;
-
-      if (imageFile) {
-        const ext = imageFile.name.split(".").pop();
-        const fileName = `trophy_${Date.now()}.${ext}`;
-        const { error: upErr } = await supabase.storage
-          .from("trophies")
-          .upload(fileName, imageFile, { upsert: true });
-        if (upErr) throw upErr;
-        const { data: urlData } = supabase.storage.from("trophies").getPublicUrl(fileName);
-        image_url = urlData?.publicUrl;
-      }
-
-      const { error } = await supabase.from("trophies").insert({
-        name: form.name,
-        description: form.description,
-        competition: form.competition,
-        image_url,
-      });
-      if (error) throw error;
+      const asset = new FormData();
+      asset.set("kind", "trophy");
+      asset.set("name", form.name);
+      asset.set("description", form.description);
+      asset.set("competition", form.competition);
+      if (imageFile) asset.set("file", imageFile);
+      await adminCommandService.uploadAsset(asset);
 
       showMsg(setMsgCreate, "Troféu criado com sucesso!");
       setForm({ name: "", description: "", competition: "" });
@@ -114,12 +102,11 @@ export default function AdminTrophiesPage() {
     if (!assignTeam) return;
     setAssigning(true);
     try {
-      const { error } = await supabase.from("team_trophies").insert({
-        trophy_id: modal.trophy.id,
-        team_id: assignTeam,
+      await adminCommandService.assignTrophy({
+        trophyId: modal.trophy.id,
+        teamId: assignTeam,
         season: assignSeason || null,
       });
-      if (error) throw error;
       showMsg(setMsgAssign, "Troféu atribuído!");
       setAssignTeam("");
       setAssignSeason("");

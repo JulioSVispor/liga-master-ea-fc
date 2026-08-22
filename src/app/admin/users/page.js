@@ -145,38 +145,11 @@ export default function AdminUsersPage() {
   const handleAddFreeAgentToTeam = async (player) => {
     if (!selectedTeamForSquad) return;
     try {
-      const { error } = await supabase
-        .from("players")
-        .update({ team_id: selectedTeamForSquad.id })
-        .eq("id", player.id);
-
-      if (error) throw error;
-
-      // Registrar no histórico de transferências
-      await supabase
-        .from("transfer_history")
-        .insert({
-          player_id: player.id,
-          player_name: player.name,
-          player_position: player.position,
-          player_rating: player.rating,
-          player_face_url: player.face_url,
-          from_team_id: null,
-          from_team_name: "Agente Livre",
-          to_team_id: selectedTeamForSquad.id,
-          to_team_name: selectedTeamForSquad.name,
-          amount: player.value,
-          transfer_type: "trade"
-        });
-
-      // Notificar treinador
-      if (selectedTeamForSquad.user_id) {
-        await supabase.from("notifications").insert({
-          user_id: selectedTeamForSquad.user_id,
-          title: "Jogador Adicionado pelo Admin 🏃‍♂️",
-          content: `O administrador adicionou o jogador ${player.name} (${player.position}, Over ${player.rating}) ao elenco do seu time.`
-        });
-      }
+      await adminService.movePlayer(supabase, {
+        playerId: player.id,
+        targetTeamId: selectedTeamForSquad.id,
+        reason: "Atribuição administrativa de agente livre",
+      });
 
       showToast(`Jogador ${player.name} adicionado com sucesso ao ${selectedTeamForSquad.name}!`);
       
@@ -383,15 +356,12 @@ export default function AdminUsersPage() {
     }
 
     try {
-      const { error } = await supabase
-        .from("players")
-        .update({
-          wage: wageVal,
-          value: valueVal
-        })
-        .eq("id", player.id);
-
-      if (error) throw error;
+      await adminService.updatePlayerFinancials(supabase, {
+        playerId: player.id,
+        wage: wageVal,
+        value: valueVal,
+        reason: "Edição manual pelo painel administrativo",
+      });
 
       showToast(`Jogador ${player.name} atualizado com sucesso!`);
       setEditingPlayerId(null);
@@ -422,50 +392,13 @@ export default function AdminUsersPage() {
       confirmMsg,
       async () => {
         try {
-          const { error } = await supabase
-            .from("players")
-            .update({ team_id: targetTeamId || null })
-            .eq("id", player.id);
-
-          if (error) throw error;
-
-          // Registrar no histórico de transferências
-          await supabase
-            .from("transfer_history")
-            .insert({
-              player_id: player.id,
-              player_name: player.name,
-              player_position: player.position,
-              player_rating: player.rating,
-              player_face_url: player.face_url,
-              from_team_id: player.team_id,
-              from_team_name: selectedTeamForSquad.name,
-              to_team_id: targetTeamId || null,
-              to_team_name: targetTeamName,
-              amount: player.value,
-              transfer_type: targetTeamId ? "trade" : "release"
-            });
-
-          // Notificar os envolvidos
-          const notificationEntries = [];
-          if (selectedTeamForSquad.user_id) {
-            notificationEntries.push({
-              user_id: selectedTeamForSquad.user_id,
-              title: "Jogador Movido pelo Admin",
-              content: `O jogador ${player.name} foi removido do seu elenco por intervenção do administrador.`
-            });
-          }
-          if (targetTeamId && targetTeam?.user_id) {
-            notificationEntries.push({
-              user_id: targetTeam.user_id,
-              title: "Jogador Adicionado pelo Admin",
-              content: `O jogador ${player.name} foi adicionado ao seu elenco por intervenção do administrador.`
-            });
-          }
-
-          if (notificationEntries.length > 0) {
-            await supabase.from("notifications").insert(notificationEntries);
-          }
+          await adminService.movePlayer(supabase, {
+            playerId: player.id,
+            targetTeamId: targetTeamId || null,
+            reason: targetTeamId
+              ? `Transferência administrativa para ${targetTeamName}`
+              : "Liberação administrativa para agentes livres",
+          });
 
           showToast("Transferência realizada com sucesso!");
           refreshSquad(player.team_id);
@@ -483,38 +416,11 @@ export default function AdminUsersPage() {
       `Tem certeza de que deseja liberar ${player.name} para o mercado? Ele se tornará Agente Livre.`,
       async () => {
         try {
-          const { error } = await supabase
-            .from("players")
-            .update({ team_id: null })
-            .eq("id", player.id);
-
-          if (error) throw error;
-
-          // Registrar histórico
-          await supabase
-            .from("transfer_history")
-            .insert({
-              player_id: player.id,
-              player_name: player.name,
-              player_position: player.position,
-              player_rating: player.rating,
-              player_face_url: player.face_url,
-              from_team_id: player.team_id,
-              from_team_name: selectedTeamForSquad.name,
-              to_team_id: null,
-              to_team_name: "Agente Livre",
-              amount: player.value,
-              transfer_type: "release"
-            });
-
-          // Notificar treinador
-          if (selectedTeamForSquad.user_id) {
-            await supabase.from("notifications").insert({
-              user_id: selectedTeamForSquad.user_id,
-              title: "Jogador Dispensado (Admin)",
-              content: `O jogador ${player.name} foi dispensado e liberado para Agentes Livres por intervenção do admin.`
-            });
-          }
+          await adminService.movePlayer(supabase, {
+            playerId: player.id,
+            targetTeamId: null,
+            reason: "Liberação administrativa para agentes livres",
+          });
 
           showToast("Jogador dispensado com sucesso!");
           refreshSquad(player.team_id);

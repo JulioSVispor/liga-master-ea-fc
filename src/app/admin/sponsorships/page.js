@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { adminCommandService } from "@/services/adminCommandService";
 
 const INPUT_STYLE =
   "w-full bg-[#090d16] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#10b981] transition-colors";
@@ -67,14 +68,12 @@ export default function AdminSponsorshipsPage() {
     e.preventDefault();
     setCreating(true);
     try {
-      const { error } = await supabase.from("sponsorships").insert({
-        sponsor_name: form.sponsor_name,
+      await adminCommandService.createSponsorship({
+        sponsorName: form.sponsor_name,
         value: parseFloat(form.value) || 0,
-        duration_seasons: parseInt(form.duration_seasons) || null,
-        team_id: form.team_id || null,
-        active: true,
+        durationSeasons: parseInt(form.duration_seasons) || null,
+        teamId: form.team_id || null,
       });
-      if (error) throw error;
       showMsg(setMsgCreate, "Patrocínio cadastrado com sucesso!");
       setForm({ sponsor_name: "", value: "", duration_seasons: "", team_id: "" });
       load();
@@ -87,11 +86,7 @@ export default function AdminSponsorshipsPage() {
 
   const handleToggleActive = async (id, currentActive) => {
     try {
-      const { error } = await supabase
-        .from("sponsorships")
-        .update({ active: !currentActive })
-        .eq("id", id);
-      if (error) throw error;
+      await adminCommandService.setSponsorshipActive(id, !currentActive);
       setSponsorships((prev) =>
         prev.map((s) => (s.id === id ? { ...s, active: !currentActive } : s))
       );

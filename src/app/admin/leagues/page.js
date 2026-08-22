@@ -280,25 +280,14 @@ export default function AdminLeaguesPage() {
     setGeneratingCup(true);
     try {
       const shuffledTeams = [...selectedCupTeams].sort(() => Math.random() - 0.5);
-      const fixtures = [];
       const startRound = cupStartPhase === "quartas" ? 1 : cupStartPhase === "semi" ? 2 : 3;
 
-      for (let i = 0; i < shuffledTeams.length; i += 2) {
-        fixtures.push({
-          season_id: selectedSeason.id,
-          league_id: null,
-          competition_type: "cup_playoff",
-          cup_name: newCupName,
-          home_team_id: shuffledTeams[i],
-          away_team_id: shuffledTeams[i+1],
-          round_number: startRound,
-          status: "pending",
-          released: false
-        });
-      }
-
-      const { error } = await supabase.from("matches").insert(fixtures);
-      if (error) throw error;
+      await adminService.createCup(supabase, {
+        seasonId: selectedSeason.id,
+        cupName: newCupName,
+        startRound,
+        teamIds: shuffledTeams,
+      });
 
       triggerAlert("success", `Copa "${newCupName}" criada com sucesso!`);
       setNewCupName("");
@@ -327,30 +316,11 @@ export default function AdminLeaguesPage() {
     if (!confirmGen) return;
 
     try {
-      const winners = activeCupMatches.map(m => {
-        if (m.home_score > m.away_score) return m.home_team_id;
-        return m.away_team_id;
+      await adminService.advanceCup(supabase, {
+        seasonId: selectedSeason.id,
+        cupName: selectedCup,
+        currentRound: currentPhase,
       });
-
-      const shuffledWinners = [...winners].sort(() => Math.random() - 0.5);
-      const nextPhaseFixtures = [];
-
-      for (let i = 0; i < shuffledWinners.length; i += 2) {
-        nextPhaseFixtures.push({
-          season_id: selectedSeason.id,
-          league_id: null,
-          competition_type: "cup_playoff",
-          cup_name: selectedCup,
-          home_team_id: shuffledWinners[i],
-          away_team_id: shuffledWinners[i+1],
-          round_number: currentPhase + 1,
-          status: "pending",
-          released: false
-        });
-      }
-
-      const { error } = await supabase.from("matches").insert(nextPhaseFixtures);
-      if (error) throw error;
 
       triggerAlert("success", `Próxima fase gerada com sucesso!`);
       loadCupMatches(selectedCup, selectedSeason.id);

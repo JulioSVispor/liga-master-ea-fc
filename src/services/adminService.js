@@ -108,4 +108,50 @@ export const adminService = {
       "Não foi possível alterar os dados financeiros."
     );
   },
+
+  async movePlayer(client, payload) {
+    return unwrap(
+      await client.rpc("admin_move_player", {
+        p_player_id: payload.playerId,
+        p_target_team_id: payload.targetTeamId ?? null,
+        p_reason: payload.reason,
+      }),
+      "Não foi possível mover o jogador."
+    );
+  },
+
+  async updatePlayerFinancials(client, payload) {
+    return unwrap(
+      await client.rpc("admin_update_player_financials", {
+        p_player_id: payload.playerId,
+        p_wage: payload.wage,
+        p_value: payload.value,
+        p_reason: payload.reason,
+      }),
+      "Não foi possível atualizar o jogador."
+    );
+  },
+
+  async createCup(client, payload) {
+    return unwrap(
+      await client.rpc("admin_create_cup", {
+        p_season_id: payload.seasonId,
+        p_cup_name: payload.cupName,
+        p_start_round: payload.startRound,
+        p_team_ids: payload.teamIds,
+      }),
+      "Não foi possível criar a copa."
+    );
+  },
+
+  async advanceCup(client, payload) {
+    return unwrap(
+      await client.rpc("admin_advance_cup", {
+        p_season_id: payload.seasonId,
+        p_cup_name: payload.cupName,
+        p_current_round: payload.currentRound,
+      }),
+      "Não foi possível gerar a próxima fase."
+    );
+  },
 };

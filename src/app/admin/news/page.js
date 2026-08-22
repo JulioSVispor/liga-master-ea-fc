@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { adminCommandService } from "@/services/adminCommandService";
 
 const CATEGORIES = [
   { value: "admin", label: "📢 Comunicado Oficial" },
@@ -75,22 +76,12 @@ export default function AdminNewsPage() {
 
     setSaving(true);
     try {
-      // Buscar dados do time se selecionado
-      let teamBadge = null;
-      if (selectedTeamId) {
-        const teamObj = teams.find((t) => t.id === selectedTeamId);
-        teamBadge = teamObj?.badge_url || null;
-      }
-
-      const { error } = await supabase.from("market_news").insert({
+      await adminCommandService.createNews({
         title: title.trim(),
         content: content.trim(),
         category,
-        team_id: selectedTeamId || null,
-        badge_url: teamBadge,
+        teamId: selectedTeamId || null,
       });
-
-      if (error) throw error;
 
       showMsg("Notícia publicada com sucesso no Mural!");
       setTitle("");
@@ -111,12 +102,7 @@ export default function AdminNewsPage() {
   const handleDelete = async (id) => {
     setDeletingId(id);
     try {
-      const { error } = await supabase
-        .from("market_news")
-        .delete()
-        .eq("id", id);
-
-      if (error) throw error;
+      await adminCommandService.removeNews(id);
 
       showMsg("Notícia removida do Mural com sucesso!");
       setNews((prev) => prev.filter((n) => n.id !== id));

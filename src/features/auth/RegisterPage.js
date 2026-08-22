@@ -36,23 +36,10 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      // 1. Validar whitelist via Server Action (nunca expõe a tabela ao browser)
-      const validateRes = await fetch("/api/auth/validate-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase() }),
-      });
-      const validateData = await validateRes.json();
-
-      if (!validateRes.ok || !validateData.allowed) {
-        setError("Não foi possível concluir o cadastro. Confira os dados ou fale com a administração da liga.");
-        setLoading(false);
-        return;
-      }
-
-      // 2. Cadastrar usuário no Supabase Auth
+      // O hook Before User Created é a autoridade da whitelist. Um pré-check
+      // separado criava enumeração de convites e uma janela de corrida.
       const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
+        email: email.trim().toLowerCase(),
         password,
         options: {
           data: {
@@ -143,8 +130,13 @@ export default function RegisterPage() {
                       placeholder={placeholder}
                     />
                     {id === "password" && (
-                      <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1" tabIndex={-1}>
-                        {showPassword ? "🙈" : "👁️"}
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((visible) => !visible)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-semibold text-gray-400 hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                        aria-label={showPassword ? "Ocultar senhas" : "Mostrar senhas"}
+                      >
+                        {showPassword ? "Ocultar" : "Mostrar"}
                       </button>
                     )}
                   </div>

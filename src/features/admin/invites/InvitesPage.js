@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { adminCommandService } from "@/services/adminCommandService";
 
 export default function InvitesPage() {
   const [emails, setEmails] = useState([]);
@@ -39,24 +40,12 @@ export default function InvitesPage() {
     if (!newEmail.trim()) return;
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { error } = await supabase.from("allowed_emails").insert([
-        {
-          email: newEmail.trim().toLowerCase(),
-          display_name: newDisplayName.trim() || null,
-          added_by: user?.id || null,
-        },
-      ]);
-      if (error) {
-        if (error.code === "23505") showAlert("error", "Este e-mail já está na lista.");
-        else showAlert("error", "Erro ao adicionar: " + error.message);
-      } else {
-        showAlert("success", `E-mail ${newEmail} adicionado com sucesso!`);
-        setNewEmail("");
-        setNewDisplayName("");
-        setShowAddModal(false);
-        await loadEmails();
-      }
+      await adminCommandService.createInvite({ email: newEmail, displayName: newDisplayName });
+      showAlert("success", `E-mail ${newEmail} adicionado com sucesso!`);
+      setNewEmail("");
+      setNewDisplayName("");
+      setShowAddModal(false);
+      await loadEmails();
     } catch (err) {
       showAlert("error", "Erro inesperado.");
     } finally {
@@ -67,11 +56,9 @@ export default function InvitesPage() {
   const handleRemove = async (id, email) => {
     if (!confirm(`Remover ${email} da whitelist?`)) return;
     try {
-      const { error } = await supabase.from("allowed_emails").delete().eq("id", id);
-      if (!error) {
-        showAlert("success", `${email} removido da lista.`);
-        await loadEmails();
-      }
+      await adminCommandService.removeInvite(id);
+      showAlert("success", `${email} removido da lista.`);
+      await loadEmails();
     } catch (err) {
       showAlert("error", "Erro ao remover.");
     }

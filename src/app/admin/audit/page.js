@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { financeService } from "@/services/financeService";
 
 export default function AdminAuditPage() {
   const [loading, setLoading] = useState(true);
@@ -38,17 +39,46 @@ export default function AdminAuditPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Carregar Histórico Financeiro Completo
-      const { data: historyData, error: historyError } = await supabase
-        .from("transfer_history")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const [historyResult, financialResult, teamsResult] = await Promise.all([
+        supabase.from("transfer_history")
+          .select("id, player_id, player_name, player_position, player_rating, player_face_url, from_team_id, to_team_id, from_team_name, to_team_name, amount, transfer_type, created_at")
+          .order("created_at", { ascending: false }),
+        supabase.from("financial_transactions")
+          .select("id, team_id, counterparty_team_id, amount, transaction_type, description, created_at")
+          .order("created_at", { ascending: false }),
+        supabase.from("teams")
+          .select("id, user_id, name, budget, max_wage_cap, players:players!players_team_id_fkey(id, name, wage, rating), profiles(display_name)")
+          .order("name", { ascending: true }),
+      ]);
 
-      if (historyError) throw historyError;
-      setHistory(historyData || []);
+      if (historyResult.error) throw historyResult.error;
+      if (financialResult.error) throw financialResult.error;
+      if (teamsResult.error) throw teamsResult.error;
+
+      const teamsData = teamsResult.data || [];
+      const teamNames = new Map(teamsData.map((team) => [team.id, team.name]));
+      const ledgerEntries = (financialResult.data || []).map((entry) => ({
+        id: `finance-${entry.id}`,
+        player_id: null,
+        player_name: entry.description || "Movimentação financeira",
+        player_position: null,
+        player_rating: null,
+        player_face_url: null,
+        from_team_id: entry.amount < 0 ? entry.team_id : entry.counterparty_team_id,
+        to_team_id: entry.amount >= 0 ? entry.team_id : entry.counterparty_team_id,
+        from_team_name: entry.amount < 0 ? teamNames.get(entry.team_id) : teamNames.get(entry.counterparty_team_id),
+        to_team_name: entry.amount >= 0 ? teamNames.get(entry.team_id) : teamNames.get(entry.counterparty_team_id),
+        amount: Math.abs(Number(entry.amount)),
+        transfer_type: entry.transaction_type === "admin_adjustment"
+          ? (entry.amount >= 0 ? "reward" : "fine")
+          : entry.transaction_type,
+        created_at: entry.created_at,
+      }));
+      const logs = [...(historyResult.data || []), ...ledgerEntries]
+        .sort((left, right) => new Date(right.created_at) - new Date(left.created_at));
+      setHistory(logs);
 
       // Calcular KPIs
-      const logs = historyData || [];
       const totalCount = logs.length;
       const monetaryTrans = logs.filter((l) => parseFloat(l.amount) > 0);
       const totalVolume = monetaryTrans.reduce((sum, item) => sum + parseFloat(item.amount), 0);
@@ -57,14 +87,7 @@ export default function AdminAuditPage() {
 
       setKpis({ totalCount, totalVolume, maxAmount, avgAmount });
 
-      // 2. Carregar Times com seus jogadores para Auditoria de Regras
-      const { data: teamsData, error: teamsError } = await supabase
-        .from("teams")
-        .select("*, players:players!players_team_id_fkey(id, name, wage, rating), profiles(display_name)")
-        .order("name", { ascending: true });
-
-      if (teamsError) throw teamsError;
-      setTeams(teamsData || []);
+      setTeams(teamsData);
 
     } catch (err) {
       console.error(err);
@@ -100,42 +123,8 @@ export default function AdminAuditPage() {
       const teamObj = teams.find((t) => t.id === selectedTeamId);
       if (!teamObj) throw new Error("Clube não encontrado.");
 
-      // 1. Atualizar saldo do clube
-      const newBudget = actionType === "reward" 
-        ? parseFloat(teamObj.budget) + val 
-        : parseFloat(teamObj.budget) - val;
-
-      const { error: updateError } = await supabase
-        .from("teams")
-        .update({ budget: newBudget })
-        .eq("id", selectedTeamId);
-
-      if (updateError) throw updateError;
-
-      // 2. Gravar no histórico de transferências (disparará o trigger de Notícias automáticas)
-      const { error: historyError } = await supabase.from("transfer_history").insert({
-        player_name: reason.trim(), // Usamos este campo para guardar o motivo da premiação/multa
-        from_team_id: actionType === "fine" ? selectedTeamId : null,
-        to_team_id: actionType === "reward" ? selectedTeamId : null,
-        from_team_name: actionType === "fine" ? teamObj.name : "Liga Master (Organização)",
-        to_team_name: actionType === "reward" ? teamObj.name : "Multas / Cobranças",
-        amount: val,
-        transfer_type: actionType, // 'reward' ou 'fine'
-        player_id: null,
-      });
-
-      if (historyError) throw historyError;
-
-      // 3. Criar notificação para o usuário do clube
-      if (teamObj.user_id) {
-        await supabase.from("notifications").insert({
-          user_id: teamObj.user_id,
-          title: actionType === "reward" ? "🏆 Bônus Creditado!" : "⚠️ Multa Aplicada!",
-          content: actionType === "reward"
-            ? `Seu clube recebeu R$ ${val.toLocaleString("pt-BR")} de bônus oficial da liga. Motivo: ${reason}`
-            : `Seu clube foi multado em R$ ${val.toLocaleString("pt-BR")} pela organização da liga. Motivo: ${reason}`,
-        });
-      }
+      const signedAmount = actionType === "reward" ? val : -val;
+      await financeService.depositFunds(selectedTeamId, signedAmount, reason.trim());
 
       showMsg(actionType === "reward" ? "Prêmio creditado com sucesso!" : "Multa aplicada com sucesso!");
       setAmount("");

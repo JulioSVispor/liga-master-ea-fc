@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { adminCommandService } from "@/services/adminCommandService";
 
 const INPUT_STYLE =
   "w-full bg-[#090d16] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#10b981] transition-colors";
@@ -71,15 +72,13 @@ export default function AdminWaitlistPage() {
     e.preventDefault();
     setCreating(true);
     try {
-      const { error } = await supabase.from("waitlist").insert({
+      await adminCommandService.createWaitlistEntry({
         name: form.name,
         whatsapp: form.whatsapp,
         email: form.email || null,
-        desired_team: form.desired_team || null,
+        desiredTeam: form.desired_team || null,
         notes: form.notes || null,
-        status: "pending",
       });
-      if (error) throw error;
       showMsg(setMsgCreate, "Entrada adicionada à lista de espera!");
       setForm({ name: "", whatsapp: "", email: "", desired_team: "", notes: "" });
       load();
@@ -92,8 +91,7 @@ export default function AdminWaitlistPage() {
 
   const handleStatusChange = async (id, status) => {
     try {
-      const { error } = await supabase.from("waitlist").update({ status }).eq("id", id);
-      if (error) throw error;
+      await adminCommandService.setWaitlistStatus(id, status);
       setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, status } : e)));
       showMsg(
         setMsgAction,

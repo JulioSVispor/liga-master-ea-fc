@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { adminCommandService } from "@/services/adminCommandService";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
@@ -30,24 +31,11 @@ function ShieldCard({ team, onUploadSuccess }) {
 
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop();
-      const fileName = `team_${team.id}_${Date.now()}.${ext}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("shields")
-        .upload(fileName, file, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage.from("shields").getPublicUrl(fileName);
-      const publicUrl = urlData?.publicUrl;
-
-      const { error: updateError } = await supabase
-        .from("teams")
-        .update({ badge_url: publicUrl })
-        .eq("id", team.id);
-
-      if (updateError) throw updateError;
+      const form = new FormData();
+      form.set("kind", "shield");
+      form.set("teamId", team.id);
+      form.set("file", file);
+      const { url: publicUrl } = await adminCommandService.uploadAsset(form);
 
       showMsg("Escudo atualizado!");
       onUploadSuccess(team.id, publicUrl);

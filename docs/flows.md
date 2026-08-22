@@ -33,7 +33,7 @@ sequenceDiagram
 ## Cadastro por convite
 
 1. Registro consulta `api/auth/validate-email`.
-2. A rota com service role procura e-mail normalizado em `allowed_emails` e rejeita ausente/usado.
+2. O Auth executa o hook `Before User Created`, que procura o e-mail normalizado em `allowed_emails` e devolve uma rejeição genérica quando o convite está ausente ou usado.
 3. Após uso, `api/auth/mark-email-used` marca o convite. O trigger de Auth cria o perfil.
 
 ## Importação

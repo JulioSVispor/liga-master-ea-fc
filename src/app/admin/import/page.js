@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Papa from "papaparse";
-import { supabase } from "@/lib/supabase";
 
 export default function AdminImport() {
   const [file, setFile] = useState(null);
@@ -155,13 +154,13 @@ export default function AdminImport() {
 
             setStatus(`Enviando lote ${i + 1} de ${totalBatches}...`);
             
-            const { error } = await supabase
-              .from("players")
-              .upsert(chunk, { onConflict: "id" });
-
-            if (error) {
-              throw new Error(`Erro no banco de dados (Lote ${i + 1}): ${error.message}`);
-            }
+            const response = await fetch("/api/ea/import", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ players: chunk }),
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(result.message || `Falha no lote ${i + 1}`);
 
             setProgress(Math.round(((i + 1) / totalBatches) * 100));
           }

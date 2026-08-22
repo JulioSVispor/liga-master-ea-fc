@@ -12,7 +12,7 @@ O Site URL e todos os domínios usados no desenvolvimento e em produção devem 
 
 ## Convites
 
-`allowed_emails` implementa whitelist: a rota de validação normaliza e consulta e-mail; a rota de consumo marca `used`. Ambas usam cliente de servidor com service role. O registro deve considerar a janela entre validar e consumir: a exclusividade/consumo atômico precisa ser garantida no banco para evitar corrida.
+`allowed_emails` implementa a whitelist. A elegibilidade é verificada exclusivamente pelo hook `Before User Created`; o trigger de criação revalida e consome o convite na mesma transação que cria perfil e clube. As rotas legadas de pré-validação e consumo respondem `410` para não enumerar convites nem reabrir uma janela de corrida.
 
 ## Autorização
 

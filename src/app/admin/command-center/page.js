@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { adminService } from "@/services/adminService";
 
 export default function CommandCenterPage() {
   const [rounds, setRounds] = useState([]);
@@ -33,15 +34,11 @@ export default function CommandCenterPage() {
   }, []);
 
   const toggleMarket = async (newStatus) => {
-    const { error } = await supabase.from("settings").update({ value: newStatus }).eq("key", "market_status");
-    if (!error) {
+    try {
+      await adminService.updateSettings(supabase, { market_status: newStatus });
       setSettings(prev => ({ ...prev, market_status: newStatus }));
-      // Registrar auditoria
-      await supabase.from("audit_logs").insert([{
-        action_type: "MARKET_TOGGLE",
-        entity_name: "settings",
-        details: { status: newStatus }
-      }]);
+    } catch (error) {
+      console.error("Erro ao alterar o mercado:", error);
     }
   };
 

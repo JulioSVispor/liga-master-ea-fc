@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { generateRoundRobinFixtures } from "@/lib/domain/round-robin";
 import { competitionService } from "@/services/competitionService";
+import { adminService } from "@/services/adminService";
 
 export default function AdminLeaguesPage() {
   // Estados Gerais
@@ -182,31 +183,16 @@ export default function AdminLeaguesPage() {
     e.preventDefault();
     if (!newSeasonName.trim()) return;
 
-    // Se houver outra ativa, perguntar ou fechar
-    const activeSeasons = seasons.filter(s => s.status === "active");
-    if (activeSeasons.length > 0) {
-      // Conclui as anteriores automaticamente
-      await supabase
-        .from("seasons")
-        .update({ status: "completed" })
-        .eq("status", "active");
-    }
-
-    const { data, error } = await supabase
-      .from("seasons")
-      .insert([{ name: newSeasonName, status: "active" }])
-      .select()
-      .single();
-
-    if (error) {
-      triggerAlert("error", "Erro ao criar temporada: " + error.message);
-    } else {
+    try {
+      const data = await adminService.createSeason(supabase, newSeasonName, true);
       triggerAlert("success", "Temporada criada com sucesso!");
       setNewSeasonName("");
       setShowSeasonModal(false);
       loadSeasons().then(() => {
         if (data) setSelectedSeason(data);
       });
+    } catch (error) {
+      triggerAlert("error", "Erro ao criar temporada: " + error.message);
     }
   };
 
@@ -214,48 +200,33 @@ export default function AdminLeaguesPage() {
     e.preventDefault();
     if (!newLeagueName.trim() || !selectedSeason) return;
 
-    const { data, error } = await supabase
-      .from("leagues")
-      .insert([
-        {
-          season_id: selectedSeason.id,
-          name: newLeagueName,
-          division: parseInt(newLeagueDivision),
-          status: "active",
-        },
-      ])
-      .select()
-      .single();
-
-    if (error) {
-      triggerAlert("error", "Erro ao criar liga: " + error.message);
-    } else {
+    try {
+      const data = await adminService.createLeague(
+        supabase,
+        selectedSeason.id,
+        newLeagueName,
+        Number.parseInt(newLeagueDivision, 10)
+      );
       triggerAlert("success", "Liga/Divisão criada com sucesso!");
       setNewLeagueName("");
       setShowLeagueModal(false);
       loadLeagues(selectedSeason.id).then(() => {
         if (data) setSelectedLeague(data);
       });
+    } catch (error) {
+      triggerAlert("error", "Erro ao criar liga: " + error.message);
     }
   };
 
   const handleAddTeamToLeague = async (teamId) => {
     if (!selectedLeague) return;
 
-    const { error } = await supabase
-      .from("league_teams")
-      .insert([
-        {
-          league_id: selectedLeague.id,
-          team_id: teamId,
-        },
-      ]);
-
-    if (error) {
-      triggerAlert("error", "Este time já está vinculado a esta liga ou a outra divisão desta temporada.");
-    } else {
+    try {
+      await adminService.addTeamToLeague(supabase, selectedLeague.id, teamId);
       triggerAlert("success", "Time adicionado à liga!");
       loadLeagueTeams(selectedLeague.id);
+    } catch (error) {
+      triggerAlert("error", "Este time já está vinculado a esta liga ou a outra divisão desta temporada.");
     }
   };
 
@@ -263,16 +234,12 @@ export default function AdminLeaguesPage() {
     const confirm = window.confirm("Tem certeza que deseja remover este time da liga? Isso apagará seu histórico nesta liga.");
     if (!confirm) return;
 
-    const { error } = await supabase
-      .from("league_teams")
-      .delete()
-      .eq("id", leagueTeamId);
-
-    if (error) {
-      triggerAlert("error", "Erro ao remover time: " + error.message);
-    } else {
+    try {
+      await adminService.removeTeamFromLeague(supabase, leagueTeamId);
       triggerAlert("success", "Time removido da liga.");
       loadLeagueTeams(selectedLeague.id);
+    } catch (error) {
+      triggerAlert("error", "Erro ao remover time: " + error.message);
     }
   };
 
@@ -394,15 +361,13 @@ export default function AdminLeaguesPage() {
 
   const handleToggleRoundRelease = async (roundNumber, currentReleasedStatus, isLeague) => {
     try {
-      let query = supabase.from("matches").update({ released: !currentReleasedStatus });
-      if (isLeague) {
-        query = query.eq("league_id", selectedLeague.id).eq("round_number", parseInt(roundNumber));
-      } else {
-        query = query.eq("cup_name", selectedCup).eq("season_id", selectedSeason.id).eq("round_number", parseInt(roundNumber));
-      }
-      
-      const { error } = await query;
-      if (error) throw error;
+      await adminService.setRoundRelease(supabase, {
+        seasonId: selectedSeason.id,
+        roundNumber: Number.parseInt(roundNumber, 10),
+        released: !currentReleasedStatus,
+        leagueId: isLeague ? selectedLeague.id : null,
+        cupName: isLeague ? null : selectedCup,
+      });
       
       triggerAlert("success", `Rodada ${roundNumber} ${!currentReleasedStatus ? "liberada" : "bloqueada"} com sucesso!`);
       if (isLeague) {
@@ -423,45 +388,19 @@ export default function AdminLeaguesPage() {
     e.preventDefault();
     if (!movingTeam || !targetLeagueId) return;
 
-    // Remover da liga atual
-    const { error: delError } = await supabase
-      .from("league_teams")
-      .delete()
-      .eq("league_id", selectedLeague.id)
-      .eq("team_id", movingTeam.team_id);
-
-    if (delError) {
-      triggerAlert("error", "Erro ao retirar time da liga atual: " + delError.message);
-      return;
-    }
-
-    // Adicionar na nova liga (com pontuação zerada por padrão)
-    const { error: insError } = await supabase
-      .from("league_teams")
-      .insert([
-        {
-          league_id: targetLeagueId,
-          team_id: movingTeam.team_id,
-          points: 0,
-          played: 0,
-          won: 0,
-          drawn: 0,
-          lost: 0,
-          goals_for: 0,
-          goals_against: 0,
-          goals_difference: 0,
-        },
-      ]);
-
-    if (insError) {
-      triggerAlert("error", "Erro ao adicionar time na liga destino: " + insError.message);
-      // Tentar reverter inserindo de volta na original
-      await supabase.from("league_teams").insert([{ league_id: selectedLeague.id, team_id: movingTeam.team_id }]);
-    } else {
+    try {
+      await adminService.moveTeamBetweenLeagues(
+        supabase,
+        movingTeam.team_id,
+        selectedLeague.id,
+        targetLeagueId
+      );
       triggerAlert("success", `Time ${movingTeam.teams.name} movido com sucesso!`);
       setMovingTeam(null);
       setTargetLeagueId("");
       loadLeagueTeams(selectedLeague.id);
+    } catch (error) {
+      triggerAlert("error", "Erro ao mover time: " + error.message);
     }
   };
 

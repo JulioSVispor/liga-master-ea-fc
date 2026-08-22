@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { adminService } from "@/services/adminService";
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -9,6 +10,7 @@ export default function AdminDashboard() {
     teamsCount: 0,
     playersCount: 0,
     marketWindowOpen: false,
+    activeSeasonId: null,
   });
   const [loading, setLoading] = useState(true);
   const [updatingWindow, setUpdatingWindow] = useState(false);
@@ -31,15 +33,17 @@ export default function AdminDashboard() {
         // 3. Status da Janela de Transferências
         const { data: windowSetting } = await supabase
           .from("seasons")
-          .select("status")
+          .select("id, market_open")
+          .eq("status", "active")
           .limit(1);
 
-        const marketWindowOpen = windowSetting && windowSetting.length > 0 && windowSetting[0].status === "active";
+        const activeSeason = windowSetting?.[0] ?? null;
 
         setStats({
           disputesCount: disputesCount || 0,
           waitlistCount: waitlistCount || 0,
-          marketWindowOpen: !!marketWindowOpen,
+          marketWindowOpen: activeSeason?.market_open === true,
+          activeSeasonId: activeSeason?.id ?? null,
         });
       } catch (err) {
         console.error("Erro ao carregar dados do admin:", err);
@@ -56,44 +60,29 @@ export default function AdminDashboard() {
     const newStatus = !stats.marketWindowOpen;
 
     try {
-      // 1. Atualizar a temporada ativa no Supabase
-      const { data: activeSeasons } = await supabase
-        .from("seasons")
-        .select("id")
-        .eq("status", stats.marketWindowOpen ? "active" : "completed")
-        .limit(1);
-
-      if (activeSeasons && activeSeasons.length > 0) {
-        await supabase
-          .from("seasons")
-          .update({ status: newStatus ? "active" : "completed" })
-          .eq("id", activeSeasons[0].id);
-      } else {
-        // Criar uma temporada inicial se não existir nenhuma
-        await supabase.from("seasons").insert([
-          { name: "Temporada 1", status: newStatus ? "active" : "completed" }
-        ]);
+      let seasonId = stats.activeSeasonId;
+      if (!seasonId) {
+        const season = await adminService.createSeason(supabase, "Temporada 1", true);
+        seasonId = season.id;
       }
+      await adminService.setMarketWindow(supabase, seasonId, newStatus);
 
       // 2. Sincronizar as tabelas de configurações globais
-      const settingsUpsert = [
-        { key: "negotiations_enabled", value: newStatus ? "true" : "false" },
-        { key: "salary_window_open", value: newStatus ? "true" : "false" },
-        { key: "trade_enabled", value: newStatus ? "true" : "false" },
-        { key: "loan_enabled", value: newStatus ? "true" : "false" },
-        { key: "buyout_enabled", value: newStatus ? "true" : "false" }
-      ];
-
-      await supabase
-        .from("settings")
-        .upsert(settingsUpsert, { onConflict: "key" });
+      await adminService.updateSettings(supabase, {
+        negotiations_enabled: String(newStatus),
+        salary_window_open: String(newStatus),
+        trade_enabled: String(newStatus),
+        loan_enabled: String(newStatus),
+        buyout_enabled: String(newStatus),
+      });
 
       setStats((prev) => ({
         ...prev,
         marketWindowOpen: newStatus,
+        activeSeasonId: seasonId,
       }));
     } catch (err) {
-      alert("Erro ao atualizar a janela de transferências: " + err.message);
+      console.error("Erro ao atualizar a janela de transferências:", err);
     } finally {
       setUpdatingWindow(false);
     }

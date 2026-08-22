@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { adminService } from "@/services/adminService";
 
 // ─── Tooltip ℹ️ ────────────────────────────────────────────────────────────
 function Tip({ text }) {
@@ -229,12 +230,10 @@ export default function AdminSettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const all = [
-        ...Object.entries(params).map(([key, value]) => ({ key, value: String(value) })),
-        ...Object.entries(toggles).map(([key, value]) => ({ key, value: String(value) })),
-      ];
-      const { error } = await supabase.from("settings").upsert(all, { onConflict: "key" });
-      if (error) throw error;
+      const all = Object.fromEntries(
+        [...Object.entries(params), ...Object.entries(toggles)].map(([key, value]) => [key, String(value)])
+      );
+      await adminService.updateSettings(supabase, all);
       showMsg("Configurações salvas com sucesso!");
     } catch (err) {
       showMsg(err.message || "Erro ao salvar.", "error");

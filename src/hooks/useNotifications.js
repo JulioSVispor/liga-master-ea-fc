@@ -25,10 +25,7 @@ export function useNotifications(userId) {
   const markAllRead = async () => {
     if (!userId) return;
     try {
-      const { error } = await supabase
-        .from("notifications")
-        .update({ read: true })
-        .eq("user_id", userId);
+      const { error } = await supabase.rpc("mark_notifications_read");
       
       if (error) throw error;
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { adminService } from "@/services/adminService";
 
 // ─── Tooltip ℹ️ ─────────────────────────────────
 function Tooltip({ content }) {
@@ -240,12 +241,7 @@ export default function AdminUsersPage() {
       async () => {
         setActionLoading(userId);
         try {
-          const { error } = await supabase
-            .from("profiles")
-            .update({ role: nextRole })
-            .eq("id", userId);
-
-          if (error) throw error;
+          await adminService.setUserRole(supabase, userId, nextRole);
           
           setUsers((prev) =>
             prev.map((u) => (u.id === userId ? { ...u, role: nextRole } : u))
@@ -283,15 +279,12 @@ export default function AdminUsersPage() {
         return;
       }
 
-      const { error } = await supabase
-        .from("teams")
-        .update({
-          budget: budgetVal,
-          max_wage_cap: wageCapVal,
-        })
-        .eq("id", selectedTeam.id);
-
-      if (error) throw error;
+      await adminService.updateTeamFinancials(supabase, {
+        teamId: selectedTeam.id,
+        budget: budgetVal,
+        maxWageCap: wageCapVal,
+        reason: "Ajuste manual no painel de usuários",
+      });
 
       await loadUsers();
       setModalOpen(false);

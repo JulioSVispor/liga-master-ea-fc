@@ -325,17 +325,38 @@ as $$
 declare v_match public.matches; v_event jsonb;
 begin
   if not public.is_admin() then raise exception 'Acesso negado' using errcode = '42501'; end if;
+  if jsonb_typeof(p_resolution) <> 'object' then raise exception 'Resolução inválida' using errcode = '22023'; end if;
   select * into v_match from public.matches where id = p_match_id for update;
   if not found then raise exception 'Partida não encontrada' using errcode = 'P0002'; end if;
+  if v_match.status = 'confirmed' then
+    raise exception 'Reabra a partida antes de alterar um resultado confirmado' using errcode = 'P0001';
+  end if;
   if coalesce((p_resolution->>'home_score')::int,-1) < 0 or coalesce((p_resolution->>'away_score')::int,-1) < 0 then
     raise exception 'Placar inválido' using errcode = '22023';
   end if;
-  delete from public.match_events where match_id = p_match_id;
-  for v_event in select value from jsonb_array_elements(coalesce(p_resolution->'events','[]'::jsonb)) loop
-    insert into public.match_events(match_id,team_id,player_id,event_type,minute)
-    values (p_match_id,(v_event->>'team_id')::uuid,(v_event->>'player_id')::bigint,
-            v_event->>'event_type',nullif(v_event->>'minute','')::int);
-  end loop;
+  if nullif(p_resolution->>'motm_player_id', '') is not null and not exists (
+    select 1 from public.players p
+     where p.id = (p_resolution->>'motm_player_id')::bigint
+       and p.team_id in (v_match.home_team_id, v_match.away_team_id)
+  ) then raise exception 'Destaque inválido' using errcode = '22023'; end if;
+  if p_resolution ? 'events' then
+    if jsonb_typeof(p_resolution->'events') <> 'array' then
+      raise exception 'Eventos inválidos' using errcode = '22023';
+    end if;
+    delete from public.match_events where match_id = p_match_id;
+    for v_event in select value from jsonb_array_elements(p_resolution->'events') loop
+      if (v_event->>'event_type') not in ('goal','assist','yellow_card','red_card')
+         or (v_event->>'team_id')::uuid not in (v_match.home_team_id, v_match.away_team_id)
+         or not exists (
+           select 1 from public.players p
+            where p.id = (v_event->>'player_id')::bigint
+              and p.team_id = (v_event->>'team_id')::uuid
+         ) then raise exception 'Evento inválido' using errcode = '22023'; end if;
+      insert into public.match_events(match_id,team_id,player_id,event_type,minute)
+      values (p_match_id,(v_event->>'team_id')::uuid,(v_event->>'player_id')::bigint,
+              v_event->>'event_type',nullif(v_event->>'minute','')::int);
+    end loop;
+  end if;
   update public.matches set
     home_score=(p_resolution->>'home_score')::int,
     away_score=(p_resolution->>'away_score')::int,
@@ -345,6 +366,10 @@ begin
   where id=p_match_id;
   insert into public.audit_logs(admin_id,action_type,entity_name,entity_id,details)
   values(auth.uid(),'resolve_match','matches',p_match_id::text,p_resolution);
+  insert into public.notifications(user_id,title,content)
+  select t.user_id, 'Partida homologada', 'A arbitragem definiu e confirmou o resultado da partida.'
+    from public.teams t
+   where t.id in (v_match.home_team_id, v_match.away_team_id) and t.user_id is not null;
   if v_match.league_id is not null then perform private.rebuild_league_standings(v_match.league_id); end if;
   perform private.rebuild_season_discipline(v_match.season_id);
   return jsonb_build_object('success',true,'match_id',p_match_id);
@@ -370,6 +395,10 @@ begin
   update public.matches set home_score=null,away_score=null,motm_player_id=null,
     status='pending',reported_by=null,disputed_by=null,dispute_reason=null,dispute_proof_url=null
   where id=p_match_id;
+  insert into public.notifications(user_id,title,content)
+  select t.user_id, 'Partida reaberta', 'A arbitragem reabriu a partida para um novo reporte.'
+    from public.teams t
+   where t.id in (v_match.home_team_id, v_match.away_team_id) and t.user_id is not null;
   if v_match.league_id is not null then perform private.rebuild_league_standings(v_match.league_id); end if;
   perform private.rebuild_season_discipline(v_match.season_id);
   return jsonb_build_object('success',true,'match_id',p_match_id);

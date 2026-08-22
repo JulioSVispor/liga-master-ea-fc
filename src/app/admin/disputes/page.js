@@ -50,7 +50,15 @@ export default function AdminDisputesPage() {
     const confirm = window.confirm("Tem certeza que deseja confirmar o placar originalmente reportado?");
     if (!confirm) return;
 
-    const { data, error } = await supabase.rpc("confirm_match", { p_match_id: match.id });
+    const { data, error } = await supabase.rpc("resolve_match", {
+      p_match_id: match.id,
+      p_resolution: {
+        home_score: match.home_score,
+        away_score: match.away_score,
+        motm_player_id: match.motm_player_id,
+        reason: "Placar originalmente reportado mantido pela arbitragem",
+      },
+    });
 
     if (error || (data && !data.success)) {
       triggerAlert("error", "Erro ao confirmar partida: " + (error?.message || data?.message));
@@ -73,22 +81,15 @@ export default function AdminDisputesPage() {
     const confirm = window.confirm(`Deseja forçar o placar de ${forceHomeScore} x ${forceAwayScore} e confirmar o jogo?`);
     if (!confirm) return;
 
-    // Primeiro atualiza o placar do jogo
-    const { error: updateError } = await supabase
-      .from("matches")
-      .update({
-        home_score: parseInt(forceHomeScore),
-        away_score: parseInt(forceAwayScore),
-      })
-      .eq("id", selectedDispute.id);
-
-    if (updateError) {
-      triggerAlert("error", "Erro ao atualizar placar: " + updateError.message);
-      return;
-    }
-
-    // Depois confirma a partida no banco
-    const { data, error } = await supabase.rpc("confirm_match", { p_match_id: selectedDispute.id });
+    const { data, error } = await supabase.rpc("resolve_match", {
+      p_match_id: selectedDispute.id,
+      p_resolution: {
+        home_score: Number.parseInt(forceHomeScore, 10),
+        away_score: Number.parseInt(forceAwayScore, 10),
+        motm_player_id: selectedDispute.motm_player_id,
+        reason: "Placar definido pela arbitragem",
+      },
+    });
 
     if (error || (data && !data.success)) {
       triggerAlert("error", "Erro ao homologar partida: " + (error?.message || data?.message));
@@ -108,30 +109,10 @@ export default function AdminDisputesPage() {
     );
     if (!confirm) return;
 
-    // Deleta eventos da partida primeiro
-    const { error: eventsError } = await supabase
-      .from("match_events")
-      .delete()
-      .eq("match_id", match.id);
-
-    if (eventsError) {
-      triggerAlert("error", "Erro ao limpar eventos da partida: " + eventsError.message);
-      return;
-    }
-
-    // Atualiza status do jogo
-    const { error: matchError } = await supabase
-      .from("matches")
-      .update({
-        home_score: null,
-        away_score: null,
-        status: "pending",
-        reported_by: null,
-        disputed_by: null,
-        dispute_reason: null,
-        dispute_proof_url: null,
-      })
-      .eq("id", match.id);
+    const { error: matchError } = await supabase.rpc("reopen_match", {
+      p_match_id: match.id,
+      p_reason: "Disputa reaberta para novo reporte",
+    });
 
     if (matchError) {
       triggerAlert("error", "Erro ao resetar partida: " + matchError.message);

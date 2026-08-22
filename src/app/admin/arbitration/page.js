@@ -175,83 +175,28 @@ export default function AdminArbitrationPage() {
 
     setActionLoading(selectedMatch.id);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const adminUserId = session?.user?.id;
-
-      // 1. Limpar eventos anteriores para evitar duplicados
-      const { error: deleteEventsError } = await supabase
-        .from("match_events")
-        .delete()
-        .eq("match_id", selectedMatch.id);
-
-      if (deleteEventsError) throw deleteEventsError;
-
-      // 2. Atualizar placar, reported_by e MOTM na partida
-      const { error: matchError } = await supabase
-        .from("matches")
-        .update({
-          home_score: parseInt(homeScore),
-          away_score: parseInt(awayScore),
-          reported_by: selectedMatch.reported_by || adminUserId,
-          motm_player_id: motmPlayerId ? parseInt(motmPlayerId) : null,
-          disputed_by: null,
-          dispute_reason: null,
-          dispute_proof_url: null,
-        })
-        .eq("id", selectedMatch.id);
-
-      if (matchError) throw matchError;
-
-      // 3. Inserir os novos eventos
       const validEvents = events
         .filter(ev => ev.player_id !== "")
         .map(ev => ({
-          match_id: selectedMatch.id,
           team_id: ev.team_id,
-          player_id: parseInt(ev.player_id),
+          player_id: Number.parseInt(ev.player_id, 10),
           event_type: ev.event_type,
-          minute: ev.minute ? parseInt(ev.minute) : null,
+          minute: ev.minute ? Number.parseInt(ev.minute, 10) : null,
         }));
 
-      if (validEvents.length > 0) {
-        const { error: eventsError } = await supabase
-          .from("match_events")
-          .insert(validEvents);
-
-        if (eventsError) throw eventsError;
-      }
-
-      // 4. Executar RPC para confirmar a partida, atualizar tabelas e processar suspensões
-      const { data: rpcData, error: rpcError } = await supabase.rpc("confirm_match", {
-        p_match_id: selectedMatch.id
+      const { data: rpcData, error: rpcError } = await supabase.rpc("resolve_match", {
+        p_match_id: selectedMatch.id,
+        p_resolution: {
+          home_score: Number.parseInt(homeScore, 10),
+          away_score: Number.parseInt(awayScore, 10),
+          motm_player_id: motmPlayerId ? Number.parseInt(motmPlayerId, 10) : null,
+          events: validEvents,
+          reason: "Homologação administrativa",
+        },
       });
 
       if (rpcError || (rpcData && !rpcData.success)) {
         throw new Error(rpcError?.message || rpcData?.message || "Falha na homologação do jogo.");
-      }
-
-      // 5. Criar notificações para os dois times envolvidos
-      const homeUser = selectedMatch.home_team?.user_id;
-      const awayUser = selectedMatch.away_team?.user_id;
-
-      const notifications = [];
-      if (homeUser) {
-        notifications.push({
-          user_id: homeUser,
-          title: "Partida Homologada (Admin)",
-          content: `A partida contra o ${selectedMatch.away_team?.name} foi resolvida e confirmada pelo Admin (${homeScore} x ${awayScore}).`
-        });
-      }
-      if (awayUser) {
-        notifications.push({
-          user_id: awayUser,
-          title: "Partida Homologada (Admin)",
-          content: `A partida contra o ${selectedMatch.home_team?.name} foi resolvida e confirmada pelo Admin (${homeScore} x ${awayScore}).`
-        });
-      }
-
-      if (notifications.length > 0) {
-        await supabase.from("notifications").insert(notifications);
       }
 
       triggerAlert("success", "Partida homologada com sucesso pelo Admin!");
@@ -274,44 +219,12 @@ export default function AdminArbitrationPage() {
 
     setActionLoading(match.id);
     try {
-      // Deleta eventos
-      await supabase.from("match_events").delete().eq("match_id", match.id);
-
-      // Limpa dados do jogo
-      const { error } = await supabase
-        .from("matches")
-        .update({
-          home_score: null,
-          away_score: null,
-          status: "pending",
-          reported_by: null,
-          disputed_by: null,
-          dispute_reason: null,
-          dispute_proof_url: null,
-        })
-        .eq("id", match.id);
+      const { error } = await supabase.rpc("reopen_match", {
+        p_match_id: match.id,
+        p_reason: "Reabertura administrativa para novo reporte",
+      });
 
       if (error) throw error;
-
-      // Notificar os envolvidos
-      const notifications = [];
-      if (match.home_team?.user_id) {
-        notifications.push({
-          user_id: match.home_team.user_id,
-          title: "Partida Resetada",
-          content: `O confronto contra o ${match.away_team?.name} foi resetado pelo admin. Você já pode reportar novamente.`
-        });
-      }
-      if (match.away_team?.user_id) {
-        notifications.push({
-          user_id: match.away_team.user_id,
-          title: "Partida Resetada",
-          content: `O confronto contra o ${match.home_team?.name} foi resetado pelo admin. Você já pode reportar novamente.`
-        });
-      }
-      if (notifications.length > 0) {
-        await supabase.from("notifications").insert(notifications);
-      }
 
       triggerAlert("success", "Partida resetada com sucesso!");
       loadData();
@@ -339,26 +252,6 @@ export default function AdminArbitrationPage() {
         throw new Error(error?.message || data?.message || "Erro desconhecido na aprovação.");
       }
 
-      // Notificações
-      const notifications = [];
-      if (trade.sender?.user_id) {
-        notifications.push({
-          user_id: trade.sender.user_id,
-          title: "Troca Homologada (Admin)",
-          content: `A sua troca com o time ${trade.receiver?.name} foi aprovada e forçada pelo Administrador.`
-        });
-      }
-      if (trade.receiver?.user_id) {
-        notifications.push({
-          user_id: trade.receiver.user_id,
-          title: "Troca Homologada (Admin)",
-          content: `A proposta de troca do time ${trade.sender?.name} foi aprovada e forçada pelo Administrador.`
-        });
-      }
-      if (notifications.length > 0) {
-        await supabase.from("notifications").insert(notifications);
-      }
-
       triggerAlert("success", "Troca aprovada com sucesso!");
       loadData();
     } catch (err) {
@@ -375,32 +268,9 @@ export default function AdminArbitrationPage() {
 
     setActionLoading(trade.id);
     try {
-      const { error } = await supabase
-        .from("trade_offers")
-        .update({ status: "cancelled" })
-        .eq("id", trade.id);
+      const { error } = await supabase.rpc("cancel_trade_offer", { p_trade_id: trade.id });
 
       if (error) throw error;
-
-      // Notificações
-      const notifications = [];
-      if (trade.sender?.user_id) {
-        notifications.push({
-          user_id: trade.sender.user_id,
-          title: "Troca Cancelada",
-          content: `A sua proposta de troca com o time ${trade.receiver?.name} foi cancelada pelo Administrador.`
-        });
-      }
-      if (trade.receiver?.user_id) {
-        notifications.push({
-          user_id: trade.receiver.user_id,
-          title: "Troca Cancelada",
-          content: `A proposta de troca recebida do time ${trade.sender?.name} foi cancelada pelo Administrador.`
-        });
-      }
-      if (notifications.length > 0) {
-        await supabase.from("notifications").insert(notifications);
-      }
 
       triggerAlert("success", "Troca cancelada com sucesso!");
       loadData();

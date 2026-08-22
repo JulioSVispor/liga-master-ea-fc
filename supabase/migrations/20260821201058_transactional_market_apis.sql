@@ -364,8 +364,8 @@ begin
   if not found or v_offer.status<>'pending' or v_offer.expires_at<=now() then raise exception 'Proposta indisponível' using errcode='P0001'; end if;
   select * into v_sender from public.teams where id=v_offer.sender_team_id for update;
   select * into v_receiver from public.teams where id=v_offer.receiver_team_id for update;
-  if p_decision='cancel' and v_sender.user_id<>auth.uid() then raise exception 'Acesso negado' using errcode='42501'; end if;
-  if p_decision in('accept','reject') and v_receiver.user_id<>auth.uid() then raise exception 'Acesso negado' using errcode='42501'; end if;
+  if p_decision='cancel' and v_sender.user_id<>auth.uid() and not public.is_admin() then raise exception 'Acesso negado' using errcode='42501'; end if;
+  if p_decision in('accept','reject') and v_receiver.user_id<>auth.uid() and not public.is_admin() then raise exception 'Acesso negado' using errcode='42501'; end if;
   if p_decision<>'accept' then
     update public.trade_offers set status=case p_decision when 'reject' then 'rejected' else 'cancelled' end where id=p_trade_id;
     return jsonb_build_object('success',true,'status',p_decision);

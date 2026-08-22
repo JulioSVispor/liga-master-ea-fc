@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { adminService } from "@/services/adminService";
 
 export default function MarketWindowPage() {
   const [season, setSeason] = useState(null);
@@ -37,12 +38,7 @@ export default function MarketWindowPage() {
     if (!season) return;
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("seasons")
-        .update({ market_open: newValue })
-        .eq("id", season.id);
-
-      if (error) throw error;
+      await adminService.setMarketWindow(supabase, season.id, newValue);
 
       setSeason((prev) => ({ ...prev, market_open: newValue }));
       showAlert("success", newValue

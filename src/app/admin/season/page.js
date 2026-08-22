@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { adminService } from "@/services/adminService";
 
 function StatCard({ title, icon, children }) {
   return (
@@ -264,16 +265,11 @@ export default function AdminSeasonPage() {
         }
       }
 
-      const settingsUpsert = [
-        { key: "season_stage", value: newStage },
-        ...stageSettings
-      ];
-
-      const { error } = await supabase
-        .from("settings")
-        .upsert(settingsUpsert, { onConflict: "key" });
-
-      if (error) throw error;
+      const settings = Object.fromEntries(
+        [{ key: "season_stage", value: newStage }, ...stageSettings]
+          .map(({ key, value }) => [key, String(value)])
+      );
+      await adminService.updateSettings(supabase, settings);
 
       setSeasonStage(newStage);
 
@@ -300,18 +296,7 @@ export default function AdminSeasonPage() {
 
     setFinishing(true);
     try {
-      // 1. Atualizar temporada
-      const { error } = await supabase
-        .from("seasons")
-        .update({ status: "completed" })
-        .eq("id", activeSeason.id);
-
-      if (error) throw error;
-
-      // 2. Resetar etapa da temporada para 'first_half'
-      await supabase.from("settings").upsert([
-        { key: "season_stage", value: "first_half" }
-      ], { onConflict: "key" });
+      await adminService.finishSeason(supabase, activeSeason.id, userRole === "master" && forceClose);
       setSeasonStage("first_half");
 
       setActiveSeason((prev) => ({ ...prev, status: "completed" }));

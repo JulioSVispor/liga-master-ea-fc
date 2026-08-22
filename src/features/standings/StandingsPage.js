@@ -158,7 +158,8 @@ export default function StandingsPage() {
         .eq("league_id", leagueId)
         .order("points", { ascending: false })
         .order("goals_difference", { ascending: false })
-        .order("goals_for", { ascending: false });
+        .order("goals_for", { ascending: false })
+        .order("team_id", { ascending: true });
 
       if (!stError && standingsData) {
         setStandings(standingsData);

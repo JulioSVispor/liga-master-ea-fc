@@ -10,7 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:db": "supabase test db",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/run-e2e.mjs",
     "audit:migrations": "node scripts/audit-migrations.mjs",
     "audit:premium": "node scripts/audit-premium.mjs",
     "lint:design": "npx -p @google/design.md designmd lint DESIGN.md",

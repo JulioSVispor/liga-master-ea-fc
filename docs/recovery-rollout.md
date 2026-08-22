@@ -14,6 +14,7 @@ Antes de tocar produção, registrar: ID/data do backup gerenciado, resultado de
 | 4 | `transactional_market_apis` | mercado e financeiro |
 | 5 | `secure_signup_and_storage` | cadastro e uploads |
 | 6 | `constraints_indexes_and_cron` | administração gradual |
+| 7 | `transactional_league_schedule` | geração de calendário, shortlist e reparo de classificação |
 
 Cada passo exige preflight salvo, rollback de contenção preparado, testes de autorização, advisors, logs e invariantes comparadas. A implantação não avança com diferença inexplicada.
 

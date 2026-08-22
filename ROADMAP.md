@@ -22,3 +22,11 @@
 - Bloqueado por ambiente: reset/testes locais do Supabase (Docker ausente) e rollout remoto (backup/restauração não verificáveis pelas ferramentas disponíveis).
 - Pendente antes de reativar administração: converter mutações administrativas legadas restantes em actions/RPCs, concluir views de leitura compatíveis, pgTAP de matriz completa e Playwright autenticado.
 - Pendente de UX: migrar dialogs/toasts/selects locais para os componentes canônicos, dividir arquivos acima de 800 linhas e executar QA visual nas quatro larguras.
+
+## Auditoria efetiva em 2026-08-22
+
+- Produção: 12 usuários Auth, 11 perfis, 11 clubes, 15.908 jogadores e 147 partidas; o histórico de migrations remoto está vazio.
+- Bloqueador confirmado: 26 funções `SECURITY DEFINER` executáveis por `anon`, uma view `SECURITY DEFINER`, escrita irrestrita em `settings` e mutações diretas legadas.
+- Integridade: cinco registros de classificação divergem da reconstrução por partidas confirmadas e há um usuário Auth sem perfil.
+- Código preparado: proteção server-side nos layouts, calendário Berger testável, substituição transacional do calendário, reparo auditável da classificação e shortlist autenticada por RPC.
+- Gate mantido: não aplicar migrations nem reparar dados remotos antes de backup verificável e execução local; Docker/Podman não está disponível nesta máquina.

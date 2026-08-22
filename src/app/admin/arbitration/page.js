@@ -421,26 +421,10 @@ export default function AdminArbitrationPage() {
     if (!selectedMatchForWo) return;
     setActionLoading(selectedMatchForWo.id);
     try {
-      // 1. Limpar eventos anteriores (mantido no client/RPC por enquanto se houver lógicas atreladas,
-      // mas a Server Action resolve a partida em si)
-      await supabase.from("match_events").delete().eq("match_id", selectedMatchForWo.id);
-
-      // 2. Chama a nova Server Action do Assistente de Arbitragem
       const { applyWalkover } = await import("@/actions/adminActions");
       await applyWalkover(selectedMatchForWo.id, winnerSide);
 
-      // 3. Confirmar e homologar partida via RPC (Opcional se a action não fizer)
-      // Como a action apenas define o status como confirmed e muda o score,
-      // rodamos a RPC para ativar as lógicas de suspensão/tabela.
-      const { data: rpcData, error: rpcError } = await supabase.rpc("confirm_match", {
-        p_match_id: selectedMatchForWo.id
-      });
-
-      if (rpcError || (rpcData && !rpcData.success)) {
-        throw new Error(rpcError?.message || rpcData?.message || "Falha na homologação pós-WO.");
-      }
-
-      triggerAlert("success", "W.O. aplicado com sucesso via Assistente!");
+      triggerAlert("success", "W.O. aplicado e classificação recalculada.");
       setShowWoModal(false);
       setSelectedMatchForWo(null);
       loadData();

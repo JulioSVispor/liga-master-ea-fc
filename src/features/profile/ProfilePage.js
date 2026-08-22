@@ -340,7 +340,7 @@ export default function ProfilePage() {
                   onChange={(e) => setNewPassword(e.target.value)}
                   required
                   minLength={6}
-                  placeholder="Mínimo 6 caracteres"
+                  placeholder="8+ caracteres, letras e números"
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-[#10b981] transition-colors"
                 />
               </div>

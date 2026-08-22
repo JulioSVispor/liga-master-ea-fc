@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { generateRoundRobinFixtures } from "@/lib/domain/round-robin";
+import { competitionService } from "@/services/competitionService";
 
 export default function AdminLeaguesPage() {
   // Estados Gerais
@@ -282,78 +284,19 @@ export default function AdminLeaguesPage() {
     }
 
     const confirm = window.confirm(
-      `Deseja gerar os confrontos para os ${leagueTeams.length} times vinculados? Isso APAGARÁ todos os jogos pendentes e confirmados existentes nesta liga!`
+      `Deseja gerar os confrontos para os ${leagueTeams.length} times vinculados? Apenas jogos ainda não disputados serão substituídos.`
     );
     if (!confirm) return;
-
-    // 1. Limpar partidas existentes
-    const { error: deleteError } = await supabase
-      .from("matches")
-      .delete()
-      .eq("league_id", selectedLeague.id);
-
-    if (deleteError) {
-      triggerAlert("error", "Erro ao limpar partidas antigas: " + deleteError.message);
-      return;
-    }
-
-    // 2. Algoritmo Round-Robin (Berger)
-    const list = leagueTeams.map(lt => lt.teams);
-    if (list.length % 2 !== 0) {
-      list.push({ id: null, name: "BYE / FOLGA" });
-    }
-
-    const numTeams = list.length;
-    const rounds = numTeams - 1;
-    const half = numTeams / 2;
-    const fixtures = [];
-
-    let tempTeams = [...list];
-    for (let r = 0; r < rounds; r++) {
-      for (let i = 0; i < half; i++) {
-        const home = tempTeams[i];
-        const away = tempTeams[numTeams - 1 - i];
-        
-        // Ignorar se um dos times for BYE/Folga
-        if (home.id && away.id) {
-          fixtures.push({
-            season_id: selectedSeason.id,
-            league_id: selectedLeague.id,
-            competition_type: "league",
-            home_team_id: r % 2 === 0 ? home.id : away.id, // Alternar mando
-            away_team_id: r % 2 === 0 ? away.id : home.id,
-            round_number: r + 1,
-            status: "pending",
-            released: false,
-          });
-        }
-      }
-      // Rotacionar mantendo o primeiro fixo
-      tempTeams = [tempTeams[0], tempTeams[numTeams - 1], ...tempTeams.slice(1, numTeams - 1)];
-    }
-
-    // Se for turno e returno
-    if (doubleRoundMatchGen) {
-      const returnFixtures = fixtures.map(f => ({
-        ...f,
-        home_team_id: f.away_team_id,
-        away_team_id: f.home_team_id,
-        round_number: f.round_number + rounds,
-        released: false,
-      }));
-      fixtures.push(...returnFixtures);
-    }
-
-    // Gravar no Supabase
-    const { error: insertError } = await supabase
-      .from("matches")
-      .insert(fixtures);
-
-    if (insertError) {
-      triggerAlert("error", "Erro ao gerar partidas: " + insertError.message);
-    } else {
+    try {
+      const fixtures = generateRoundRobinFixtures(
+        leagueTeams.map((leagueTeam) => leagueTeam.teams),
+        { doubleRound: doubleRoundMatchGen }
+      );
+      await competitionService.replaceLeagueSchedule(supabase, selectedLeague.id, fixtures);
       triggerAlert("success", `${fixtures.length} partidas geradas com sucesso!`);
       loadLeagueMatches(selectedLeague.id);
+    } catch (error) {
+      triggerAlert("error", error.message || "Não foi possível gerar os confrontos.");
     }
   };
 

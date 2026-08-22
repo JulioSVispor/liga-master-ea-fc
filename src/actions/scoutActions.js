@@ -1,75 +1,30 @@
 "use server";
 
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
-
-async function getSupabase() {
-  const cookieStore = await cookies();
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options);
-            });
-          } catch (error) {}
-        }
-      }
-    }
-  );
-}
+import { assertMutationsAllowed } from "@/lib/maintenance";
+import { requireAuthenticatedUser } from "@/lib/supabase/server-auth";
 
 export async function toggleShortlist(playerId) {
-  const supabase = await getSupabase();
-  const { data: { session } } = await supabase.auth.getSession();
-  
-  if (!session) throw new Error("Não autenticado");
-
-  const userId = session.user.id;
-
-  // Verifica se já está na shortlist
-  const { data: existing } = await supabase
-    .from("shortlists")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("player_id", playerId)
-    .single();
-
-  if (existing) {
-    // Se existe, remove
-    const { error } = await supabase
-      .from("shortlists")
-      .delete()
-      .eq("id", existing.id);
-      
-    if (error) throw new Error("Erro ao remover da lista");
-    return { added: false };
-  } else {
-    // Se não existe, adiciona
-    const { error } = await supabase
-      .from("shortlists")
-      .insert([{ user_id: userId, player_id: playerId }]);
-      
-    if (error) throw new Error("Erro ao adicionar à lista");
-    return { added: true };
+  assertMutationsAllowed();
+  const normalizedPlayerId = Number(playerId);
+  if (!Number.isSafeInteger(normalizedPlayerId) || normalizedPlayerId <= 0 || normalizedPlayerId > 2_147_483_647) {
+    throw new Error("Jogador inválido.");
   }
+
+  const { supabase } = await requireAuthenticatedUser();
+  const { data, error } = await supabase.rpc("toggle_shortlist", {
+    p_player_id: normalizedPlayerId,
+  });
+  if (error) throw new Error(error.message || "Não foi possível atualizar a lista.");
+  return data;
 }
 
 export async function getShortlistedPlayerIds() {
-  const supabase = await getSupabase();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return [];
+  const { supabase, user } = await requireAuthenticatedUser();
 
   const { data, error } = await supabase
     .from("shortlists")
     .select("player_id")
-    .eq("user_id", session.user.id);
+    .eq("user_id", user.id);
 
   if (error || !data) return [];
   return data.map(s => s.player_id);

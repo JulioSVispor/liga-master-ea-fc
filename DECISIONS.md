@@ -19,3 +19,11 @@ Não foi possível inferir por que os scripts SQL são avulsos ou qual deles est
 - `public_profiles` e `team_directory` separam diretório compartilhável de PII e dados financeiros.
 - O baseline remoto deve ser marcado como aplicado; scripts antigos não são fonte executável.
 - A produção não recebe migrations sem backup verificável e validação local reproduzível.
+
+## ADR-002 — Calendário e autorização no limite do servidor (2026-08-22)
+
+- Layouts de `/dashboard` e `/admin` validam a identidade no servidor; o Proxy permanece apenas como rejeição antecipada.
+- O algoritmo Berger é regra pura e testada, enquanto a substituição do calendário é uma única RPC transacional.
+- Uma liga com resultado, disputa ou súmula reportada não pode ter o calendário regenerado.
+- A classificação é sempre reparada a partir de partidas confirmadas por uma RPC administrativa auditável; nunca por ajustes manuais de pontos.
+- A implantação continua bloqueada até haver backup verificável e validação das migrations em PostgreSQL/Supabase local.

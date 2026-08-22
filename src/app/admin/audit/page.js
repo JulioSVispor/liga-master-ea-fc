@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { financeService } from "@/services/financeService";
+import { AppImage } from "@/components/ui/AppImage";
+import { useDeferredEffect } from "@/hooks/useDeferredEffect";
 
 export default function AdminAuditPage() {
   const [loading, setLoading] = useState(true);
@@ -97,9 +99,7 @@ export default function AdminAuditPage() {
     }
   }, []);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useDeferredEffect(loadData);
 
   // Aplicar Bônus/Prêmio ou Multa a um Time
   const handleApplyAction = async (e) => {
@@ -407,7 +407,7 @@ export default function AdminAuditPage() {
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded-full bg-white/5 overflow-hidden border border-white/10 flex items-center justify-center text-xs text-gray-400">
                                 {log.player_face_url ? (
-                                  <img src={log.player_face_url} alt="" className="w-full h-full object-cover" />
+                                  <AppImage src={log.player_face_url} alt="" className="w-full h-full object-cover" />
                                 ) : (
                                   "💵"
                                 )}

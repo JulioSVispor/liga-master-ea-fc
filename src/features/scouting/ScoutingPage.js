@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { playerService } from "@/services/playerService";
 import { transferService } from "@/services/transferService";
+import { AppImage } from "@/components/ui/AppImage";
 // ─── Tooltip ℹ️ ─────────────────────────────────
 function Tooltip({ content }) {
   const [visible, setVisible] = useState(false);
@@ -53,6 +55,7 @@ const formatBuyoutPrice = (price) => {
 };
 
 export default function Scouting() {
+  const router = useRouter();
   // Estados para Filtros
   const [search, setSearch] = useState("");
   const [position, setPosition] = useState("ALL");
@@ -433,7 +436,7 @@ export default function Scouting() {
                         <div className="flex items-center gap-3">
                           <div className="relative h-9 w-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                             {player.face_url ? (
-                              <img src={player.face_url} alt="" className="h-full w-full object-cover scale-110" />
+                              <AppImage src={player.face_url} alt="" className="h-full w-full object-cover scale-110" />
                             ) : (
                               <span className="text-lg">👤</span>
                             )}
@@ -542,7 +545,7 @@ export default function Scouting() {
                               {/* Troca */}
                               <button
                                 onClick={() => {
-                                  window.location.href = "/dashboard/market?tab=trades";
+                                  router.push("/dashboard/market?tab=trades");
                                 }}
                                 className="flex-1 rounded-lg bg-gray-500/10 hover:bg-gray-500/20 border border-gray-500/20 px-2 py-2 text-[10px] font-bold text-gray-300 transition-all flex items-center justify-center gap-1"
                                 title="Iniciar Proposta de Troca"
@@ -576,7 +579,7 @@ export default function Scouting() {
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="relative h-9 w-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                         {player.face_url ? (
-                          <img src={player.face_url} alt="" className="h-full w-full object-cover scale-110" />
+                          <AppImage src={player.face_url} alt="" className="h-full w-full object-cover scale-110" />
                         ) : (
                           <span className="text-base">👤</span>
                         )}
@@ -672,7 +675,7 @@ export default function Scouting() {
                         {/* Troca */}
                         <button
                           onClick={() => {
-                            window.location.href = "/dashboard/market?tab=trades";
+                            router.push("/dashboard/market?tab=trades");
                           }}
                           className="rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-2 text-[9px] font-bold text-white transition-all text-center flex items-center justify-center"
                           title="Iniciar Proposta de Troca"
@@ -740,7 +743,7 @@ export default function Scouting() {
               <div className="flex items-center gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/5">
                 <div className="h-12 w-12 rounded-full overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center relative flex-shrink-0">
                   {selectedLoanPlayer.face_url ? (
-                    <img src={selectedLoanPlayer.face_url} alt="" className="h-full w-full object-cover scale-110" />
+                    <AppImage src={selectedLoanPlayer.face_url} alt="" className="h-full w-full object-cover scale-110" />
                   ) : (
                     <span className="text-xl">👤</span>
                   )}
@@ -813,7 +816,7 @@ export default function Scouting() {
               <div className="text-[10px] text-gray-400 bg-blue-500/5 border border-blue-500/15 p-3.5 rounded-xl leading-relaxed flex gap-2">
                 <span className="text-sm">💡</span>
                 <div>
-                  <strong>Atenção:</strong> A proposta será enviada para a aba "Trocas & Propostas" do dono do jogador. Ao ser aceita, a sua parte salarial será computada na sua folha salarial total contra o seu teto máximo.
+                  <strong>Atenção:</strong> A proposta será enviada para a aba &quot;Trocas &amp; Propostas&quot; do dono do jogador. Ao ser aceita, a sua parte salarial será computada na sua folha salarial total contra o seu teto máximo.
                 </div>
               </div>
 

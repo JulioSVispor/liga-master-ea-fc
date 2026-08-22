@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { adminService } from "@/services/adminService";
+import { useDeferredEffect } from "@/hooks/useDeferredEffect";
 
 // ─── Tooltip ℹ️ ────────────────────────────────────────────────────────────
 function Tip({ text }) {
@@ -224,7 +225,7 @@ export default function AdminSettingsPage() {
     }
   }, []);
 
-  useEffect(() => { loadSettings(); }, [loadSettings]);
+  useDeferredEffect(loadSettings);
 
   // ── Salvar tudo junto ────────────────────────────────────────────────────
   const handleSave = async () => {

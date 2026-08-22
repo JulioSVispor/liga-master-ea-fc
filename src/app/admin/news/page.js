@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { adminCommandService } from "@/services/adminCommandService";
+import { AppImage } from "@/components/ui/AppImage";
+import { useDeferredEffect } from "@/hooks/useDeferredEffect";
 
 const CATEGORIES = [
   { value: "admin", label: "📢 Comunicado Oficial" },
@@ -63,9 +65,7 @@ export default function AdminNewsPage() {
     }
   }, []);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useDeferredEffect(loadData);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -284,10 +284,10 @@ export default function AdminNewsPage() {
 
                   <div className="flex items-start gap-3">
                     {item.badge_url && (
-                      <img src={item.badge_url} alt="" className="w-10 h-10 object-contain rounded bg-white/5 p-1 flex-shrink-0" />
+                      <AppImage src={item.badge_url} alt="" className="w-10 h-10 object-contain rounded bg-white/5 p-1 flex-shrink-0" />
                     )}
                     {item.player_face_url && !item.badge_url && (
-                      <img src={item.player_face_url} alt="" className="w-10 h-10 object-cover rounded-full bg-white/5 border border-white/10 flex-shrink-0" />
+                      <AppImage src={item.player_face_url} alt="" className="w-10 h-10 object-cover rounded-full bg-white/5 border border-white/10 flex-shrink-0" />
                     )}
                     <div>
                       <h4 className="text-sm font-bold text-white leading-snug">{item.title}</h4>

@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { AppImage } from "@/components/ui/AppImage";
+import { useDeferredEffect } from "@/hooks/useDeferredEffect";
 
 // ─── Tooltip ℹ️ ─────────────────────────────────
 function Tooltip({ content }) {
@@ -54,41 +56,6 @@ export default function StandingsPage() {
   const [viewingPlayers, setViewingPlayers] = useState([]);
   const [viewingCoach, setViewingCoach] = useState(null);
   const [viewingLoading, setViewingLoading] = useState(false);
-
-  useEffect(() => {
-    loadSeasons();
-  }, []);
-
-  useEffect(() => {
-    if (selectedSeason) {
-      loadLeagues(selectedSeason.id);
-      loadCups(selectedSeason.id);
-    } else {
-      setLeagues([]);
-      setSelectedLeague(null);
-      setAllCups([]);
-      setSelectedCup("");
-    }
-  }, [selectedSeason]);
-
-  useEffect(() => {
-    if (selectedCup && selectedSeason) {
-      loadCupMatches(selectedCup, selectedSeason.id);
-    } else {
-      setCupMatches([]);
-    }
-  }, [selectedCup, selectedSeason]);
-
-  useEffect(() => {
-    if (selectedLeague) {
-      loadLeagueData(selectedLeague.id);
-    } else {
-      setStandings([]);
-      setTopScorers([]);
-      setTopAssists([]);
-      setSuspensions([]);
-    }
-  }, [selectedLeague]);
 
   const loadSeasons = async () => {
     const { data, error } = await supabase
@@ -285,6 +252,36 @@ export default function StandingsPage() {
       setLoading(false);
     }
   };
+
+  useDeferredEffect(loadSeasons);
+
+  useDeferredEffect(() => {
+    if (selectedSeason) {
+      loadLeagues(selectedSeason.id);
+      loadCups(selectedSeason.id);
+    } else {
+      setLeagues([]);
+      setSelectedLeague(null);
+      setAllCups([]);
+      setSelectedCup("");
+    }
+  }, selectedSeason?.id || "no-season");
+
+  useDeferredEffect(() => {
+    if (selectedCup && selectedSeason) loadCupMatches(selectedCup, selectedSeason.id);
+    else setCupMatches([]);
+  }, `${selectedSeason?.id || "no-season"}:${selectedCup || "no-cup"}`);
+
+  useDeferredEffect(() => {
+    if (selectedLeague) loadLeagueData(selectedLeague.id);
+    else {
+      setStandings([]);
+      setTopScorers([]);
+      setTopAssists([]);
+      setTopMotm([]);
+      setSuspensions([]);
+    }
+  }, selectedLeague?.id || "no-league");
 
   const handleViewTeamRoster = async (team) => {
     if (!team) return;
@@ -532,7 +529,7 @@ export default function StandingsPage() {
           <div className="flex items-center gap-2 truncate min-w-0">
             <div className="h-5 w-5 rounded-full bg-white/5 flex items-center justify-center flex-shrink-0">
               {m.home_team?.badge_url ? (
-                <img src={m.home_team.badge_url} alt="" className="w-4 h-4 object-contain" />
+                <AppImage src={m.home_team.badge_url} alt="" className="w-4 h-4 object-contain" />
               ) : (
                 <span className="text-[10px]">🛡️</span>
               )}
@@ -564,7 +561,7 @@ export default function StandingsPage() {
           <div className="flex items-center gap-2 truncate min-w-0">
             <div className="h-5 w-5 rounded-full bg-white/5 flex items-center justify-center flex-shrink-0">
               {m.away_team?.badge_url ? (
-                <img src={m.away_team.badge_url} alt="" className="w-4 h-4 object-contain" />
+                <AppImage src={m.away_team.badge_url} alt="" className="w-4 h-4 object-contain" />
               ) : (
                 <span className="text-[10px]">🛡️</span>
               )}
@@ -755,7 +752,7 @@ export default function StandingsPage() {
                           >
                             <div className="h-8 w-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                               {lt.teams?.badge_url ? (
-                                <img src={lt.teams.badge_url} alt="" className="h-full w-full object-contain" />
+                                <AppImage src={lt.teams.badge_url} alt="" className="h-full w-full object-contain" />
                               ) : (
                                 <span className="text-[14px]">🛡️</span>
                               )}
@@ -810,7 +807,7 @@ export default function StandingsPage() {
                         <div className="flex items-center gap-3">
                           <div className="h-8 w-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                             {item.player?.face_url ? (
-                              <img src={item.player.face_url} alt="" className="h-full w-full object-cover scale-110" />
+                              <AppImage src={item.player.face_url} alt="" className="h-full w-full object-cover scale-110" />
                             ) : (
                               <span className="text-xs">👤</span>
                             )}
@@ -832,7 +829,7 @@ export default function StandingsPage() {
                           >
                             <div className="h-6 w-6 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                               {item.team.badge_url ? (
-                                <img src={item.team.badge_url} alt="" className="h-full w-full object-contain" />
+                                <AppImage src={item.team.badge_url} alt="" className="h-full w-full object-contain" />
                               ) : (
                                 <span className="text-xs">🛡️</span>
                               )}
@@ -884,7 +881,7 @@ export default function StandingsPage() {
                         <div className="flex items-center gap-3">
                           <div className="h-8 w-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                             {item.player?.face_url ? (
-                              <img src={item.player.face_url} alt="" className="h-full w-full object-cover scale-110" />
+                              <AppImage src={item.player.face_url} alt="" className="h-full w-full object-cover scale-110" />
                             ) : (
                               <span className="text-xs">👤</span>
                             )}
@@ -906,7 +903,7 @@ export default function StandingsPage() {
                           >
                             <div className="h-6 w-6 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                               {item.team.badge_url ? (
-                                <img src={item.team.badge_url} alt="" className="h-full w-full object-contain" />
+                                <AppImage src={item.team.badge_url} alt="" className="h-full w-full object-contain" />
                               ) : (
                                 <span className="text-xs">🛡️</span>
                               )}
@@ -958,7 +955,7 @@ export default function StandingsPage() {
                         <div className="flex items-center gap-3">
                           <div className="h-8 w-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                             {item.player?.face_url ? (
-                              <img src={item.player.face_url} alt="" className="h-full w-full object-cover scale-110" />
+                              <AppImage src={item.player.face_url} alt="" className="h-full w-full object-cover scale-110" />
                             ) : (
                               <span className="text-xs">👤</span>
                             )}
@@ -980,7 +977,7 @@ export default function StandingsPage() {
                           >
                             <div className="h-6 w-6 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                               {item.team.badge_url ? (
-                                <img src={item.team.badge_url} alt="" className="h-full w-full object-contain" />
+                                <AppImage src={item.team.badge_url} alt="" className="h-full w-full object-contain" />
                               ) : (
                                 <span className="text-xs">🛡️</span>
                               )}
@@ -1033,7 +1030,7 @@ export default function StandingsPage() {
                           <div className="flex items-center gap-3">
                             <div className="h-8 w-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                               {susp.players?.face_url ? (
-                                <img src={susp.players.face_url} alt="" className="h-full w-full object-cover scale-110" />
+                                <AppImage src={susp.players.face_url} alt="" className="h-full w-full object-cover scale-110" />
                               ) : (
                                 <span className="text-xs">👤</span>
                               )}
@@ -1055,7 +1052,7 @@ export default function StandingsPage() {
                             >
                               <div className="h-6 w-6 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                                 {suspTeam.badge_url ? (
-                                  <img src={suspTeam.badge_url} alt="" className="h-full w-full object-contain" />
+                                  <AppImage src={suspTeam.badge_url} alt="" className="h-full w-full object-contain" />
                                 ) : (
                                   <span className="text-xs">🛡️</span>
                                 )}
@@ -1295,7 +1292,7 @@ export default function StandingsPage() {
                                  {slot.title}
                                </span>
                                {slot.player.face_url ? (
-                                 <img src={slot.player.face_url} alt="" className="h-full w-full object-cover scale-110" />
+                                 <AppImage src={slot.player.face_url} alt="" className="h-full w-full object-cover scale-110" />
                                ) : (
                                  <span className="text-sm">👤</span>
                                )}
@@ -1368,7 +1365,7 @@ export default function StandingsPage() {
                               <div className="flex items-center gap-2">
                                 <div className="h-6 w-6 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                                   {p.face_url ? (
-                                    <img src={p.face_url} alt="" className="h-full w-full object-cover scale-110" />
+                                    <AppImage src={p.face_url} alt="" className="h-full w-full object-cover scale-110" />
                                   ) : (
                                     <span>👤</span>
                                   )}

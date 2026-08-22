@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { adminCommandService } from "@/services/adminCommandService";
+import { AppImage } from "@/components/ui/AppImage";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
@@ -52,7 +53,7 @@ function ShieldCard({ team, onUploadSuccess }) {
       {/* Escudo */}
       <div className="w-20 h-20 rounded-2xl overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center">
         {team.badge_url ? (
-          <img
+          <AppImage
             src={team.badge_url}
             alt={`Escudo ${team.name}`}
             className="w-full h-full object-contain"

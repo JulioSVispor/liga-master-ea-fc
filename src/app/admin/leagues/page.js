@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { generateRoundRobinFixtures } from "@/lib/domain/round-robin";
 import { competitionService } from "@/services/competitionService";
 import { adminService } from "@/services/adminService";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { useConfirmation } from "@/hooks/useConfirmation";
+import { AppImage } from "@/components/ui/AppImage";
+import { useDeferredEffect } from "@/hooks/useDeferredEffect";
 
 export default function AdminLeaguesPage() {
   // Estados Gerais
@@ -28,6 +32,7 @@ export default function AdminLeaguesPage() {
 
   // Mensagens
   const [alert, setAlert] = useState(null);
+  const { requestConfirmation, confirmationProps } = useConfirmation();
 
   // Estados de Copas (Champions)
   const [activePageTab, setActivePageTab] = useState("leagues"); // "leagues" | "cups"
@@ -39,41 +44,6 @@ export default function AdminLeaguesPage() {
   const [selectedCup, setSelectedCup] = useState("");
   const [cupMatches, setCupMatches] = useState([]);
   const [generatingCup, setGeneratingCup] = useState(false);
-
-  useEffect(() => {
-    loadSeasons();
-    loadAllTeams();
-  }, []);
-
-  useEffect(() => {
-    if (selectedSeason) {
-      loadLeagues(selectedSeason.id);
-      loadCups(selectedSeason.id);
-    } else {
-      setLeagues([]);
-      setSelectedLeague(null);
-      setAllCups([]);
-      setSelectedCup("");
-    }
-  }, [selectedSeason]);
-
-  useEffect(() => {
-    if (selectedLeague) {
-      loadLeagueTeams(selectedLeague.id);
-      loadLeagueMatches(selectedLeague.id);
-    } else {
-      setLeagueTeams([]);
-      setActiveMatches([]);
-    }
-  }, [selectedLeague]);
-
-  useEffect(() => {
-    if (selectedCup && selectedSeason) {
-      loadCupMatches(selectedCup, selectedSeason.id);
-    } else {
-      setCupMatches([]);
-    }
-  }, [selectedCup, selectedSeason]);
 
   const triggerAlert = (type, message) => {
     setAlert({ type, message });
@@ -178,6 +148,38 @@ export default function AdminLeaguesPage() {
     }
   };
 
+  useDeferredEffect(() => {
+    loadSeasons();
+    loadAllTeams();
+  });
+
+  useDeferredEffect(() => {
+    if (selectedSeason) {
+      loadLeagues(selectedSeason.id);
+      loadCups(selectedSeason.id);
+    } else {
+      setLeagues([]);
+      setSelectedLeague(null);
+      setAllCups([]);
+      setSelectedCup("");
+    }
+  }, selectedSeason?.id || "no-season");
+
+  useDeferredEffect(() => {
+    if (selectedLeague) {
+      loadLeagueTeams(selectedLeague.id);
+      loadLeagueMatches(selectedLeague.id);
+    } else {
+      setLeagueTeams([]);
+      setActiveMatches([]);
+    }
+  }, selectedLeague?.id || "no-league");
+
+  useDeferredEffect(() => {
+    if (selectedCup && selectedSeason) loadCupMatches(selectedCup, selectedSeason.id);
+    else setCupMatches([]);
+  }, `${selectedSeason?.id || "no-season"}:${selectedCup || "no-cup"}`);
+
   // Ações de Criação
   const handleCreateSeason = async (e) => {
     e.preventDefault();
@@ -231,8 +233,13 @@ export default function AdminLeaguesPage() {
   };
 
   const handleRemoveTeamFromLeague = async (leagueTeamId) => {
-    const confirm = window.confirm("Tem certeza que deseja remover este time da liga? Isso apagará seu histórico nesta liga.");
-    if (!confirm) return;
+    const confirmed = await requestConfirmation({
+      title: "Remover clube da divisão",
+      message: "O clube será removido desta divisão. A operação será bloqueada se já houver partidas vinculadas.",
+      confirmLabel: "Remover clube",
+      intent: "danger",
+    });
+    if (!confirmed) return;
 
     try {
       await adminService.removeTeamFromLeague(supabase, leagueTeamId);
@@ -250,10 +257,12 @@ export default function AdminLeaguesPage() {
       return;
     }
 
-    const confirm = window.confirm(
-      `Deseja gerar os confrontos para os ${leagueTeams.length} times vinculados? Apenas jogos ainda não disputados serão substituídos.`
-    );
-    if (!confirm) return;
+    const confirmed = await requestConfirmation({
+      title: "Gerar calendário da liga",
+      message: `Serão gerados confrontos para ${leagueTeams.length} clubes. Apenas partidas ainda não disputadas poderão ser substituídas.`,
+      confirmLabel: "Gerar calendário",
+    });
+    if (!confirmed) return;
     try {
       const fixtures = generateRoundRobinFixtures(
         leagueTeams.map((leagueTeam) => leagueTeam.teams),
@@ -312,7 +321,11 @@ export default function AdminLeaguesPage() {
       return;
     }
 
-    const confirmGen = window.confirm(`Deseja gerar os confrontos da próxima fase para a copa "${selectedCup}"?`);
+    const confirmGen = await requestConfirmation({
+      title: "Gerar próxima fase",
+      message: `Os classificados da copa ${selectedCup} serão pareados na próxima fase. A operação não pode ser repetida.`,
+      confirmLabel: "Gerar próxima fase",
+    });
     if (!confirmGen) return;
 
     try {
@@ -376,6 +389,7 @@ export default function AdminLeaguesPage() {
 
   return (
     <div className="space-y-8">
+      <ConfirmDialog {...confirmationProps} />
       {/* Cabeçalho */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -649,7 +663,7 @@ export default function AdminLeaguesPage() {
                     })}
                     {activeMatches.length === 0 && (
                       <div className="py-12 text-center text-gray-500 text-sm border border-dashed border-white/5 rounded-xl">
-                        Nenhum jogo gerado ainda para esta liga. Clique em "Gerar Tabela de Jogos".
+                        Nenhum jogo gerado ainda para esta liga. Clique em &quot;Gerar Tabela de Jogos&quot;.
                       </div>
                     )}
                   </div>
@@ -717,7 +731,7 @@ export default function AdminLeaguesPage() {
                       </div>
                       <div className="flex items-start gap-2">
                         <span>🔁</span>
-                        <span>Você pode mover times individualmente entre divisões usando o botão "Mover/Acesso".</span>
+                        <span>Você pode mover times individualmente entre divisões usando o botão &quot;Mover/Acesso&quot;.</span>
                       </div>
                       <div className="flex items-start gap-2">
                         <span>📅</span>
@@ -833,7 +847,7 @@ export default function AdminLeaguesPage() {
                                 <div className="flex items-center justify-between gap-2">
                                   <div className="flex items-center gap-2 truncate">
                                     {m.home_team?.badge_url ? (
-                                      <img src={m.home_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                      <AppImage src={m.home_team.badge_url} alt="" className="w-5 h-5 object-contain" />
                                     ) : (
                                       <span className="text-xs">🛡️</span>
                                     )}
@@ -853,7 +867,7 @@ export default function AdminLeaguesPage() {
                                 <div className="flex items-center justify-between gap-2">
                                   <div className="flex items-center gap-2 truncate">
                                     {m.away_team?.badge_url ? (
-                                      <img src={m.away_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                      <AppImage src={m.away_team.badge_url} alt="" className="w-5 h-5 object-contain" />
                                     ) : (
                                       <span className="text-xs">🛡️</span>
                                     )}
@@ -930,7 +944,7 @@ export default function AdminLeaguesPage() {
                                 <div className="flex items-center justify-between gap-2">
                                   <div className="flex items-center gap-2 truncate">
                                     {m.home_team?.badge_url ? (
-                                      <img src={m.home_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                      <AppImage src={m.home_team.badge_url} alt="" className="w-5 h-5 object-contain" />
                                     ) : (
                                       <span className="text-xs">🛡️</span>
                                     )}
@@ -950,7 +964,7 @@ export default function AdminLeaguesPage() {
                                 <div className="flex items-center justify-between gap-2">
                                   <div className="flex items-center gap-2 truncate">
                                     {m.away_team?.badge_url ? (
-                                      <img src={m.away_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                      <AppImage src={m.away_team.badge_url} alt="" className="w-5 h-5 object-contain" />
                                     ) : (
                                       <span className="text-xs">🛡️</span>
                                     )}
@@ -1018,7 +1032,7 @@ export default function AdminLeaguesPage() {
                                 <div className="flex items-center justify-between gap-2">
                                   <div className="flex items-center gap-2 truncate">
                                     {m.home_team?.badge_url ? (
-                                      <img src={m.home_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                      <AppImage src={m.home_team.badge_url} alt="" className="w-5 h-5 object-contain" />
                                     ) : (
                                       <span className="text-xs">🛡️</span>
                                     )}
@@ -1038,7 +1052,7 @@ export default function AdminLeaguesPage() {
                                 <div className="flex items-center justify-between gap-2">
                                   <div className="flex items-center gap-2 truncate">
                                     {m.away_team?.badge_url ? (
-                                      <img src={m.away_team.badge_url} alt="" className="w-5 h-5 object-contain" />
+                                      <AppImage src={m.away_team.badge_url} alt="" className="w-5 h-5 object-contain" />
                                     ) : (
                                       <span className="text-xs">🛡️</span>
                                     )}
@@ -1071,7 +1085,7 @@ export default function AdminLeaguesPage() {
             <div className="py-16 text-center text-gray-500 text-sm border border-dashed border-white/5 rounded-2xl bg-[#090d16]/20">
               <span className="text-4xl block mb-2">🏆</span>
               <p>Nenhuma copa mata-mata ativa nesta temporada.</p>
-              <p className="text-xs text-gray-400 mt-1">Clique em "Criar Copa / Playoff" acima para sortear os confrontos iniciais.</p>
+              <p className="text-xs text-gray-400 mt-1">Clique em &quot;Criar Copa / Playoff&quot; acima para sortear os confrontos iniciais.</p>
             </div>
           )}
         </>
@@ -1097,7 +1111,7 @@ export default function AdminLeaguesPage() {
                   required
                 />
                 <span className="text-[10px] text-amber-400 mt-2 block">
-                  ⚠️ Criar uma nova temporada colocará as temporadas anteriores no status "FINALIZADA".
+                  ⚠️ Criar uma nova temporada colocará as temporadas anteriores no status &quot;FINALIZADA&quot;.
                 </span>
               </div>
               <div className="flex justify-end gap-3 pt-2">

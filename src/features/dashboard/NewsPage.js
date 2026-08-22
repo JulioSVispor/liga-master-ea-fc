@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/Badge";
+import { AppImage } from "@/components/ui/AppImage";
 
 export default function NewsPage() {
   const [news, setNews] = useState([]);
@@ -56,9 +57,9 @@ export default function NewsPage() {
             <div key={item.id} className="glass-panel p-5 rounded-2xl border border-white/5 bg-[#090d16]/75 flex flex-col sm:flex-row gap-5 items-start transition-all hover:bg-white/[0.02]">
               <div className="flex-shrink-0 flex items-center justify-center h-14 w-14 rounded-xl bg-black/20 border border-white/10">
                 {item.badge_url ? (
-                  <img src={item.badge_url} alt="" className="w-10 h-10 object-contain drop-shadow-md" />
+                  <AppImage src={item.badge_url} alt="" className="w-10 h-10 object-contain drop-shadow-md" />
                 ) : item.player_face_url ? (
-                  <img src={item.player_face_url} alt="" className="w-10 h-10 object-cover rounded-full drop-shadow-md" />
+                  <AppImage src={item.player_face_url} alt="" className="w-10 h-10 object-cover rounded-full drop-shadow-md" />
                 ) : (
                   <span className="text-2xl">📰</span>
                 )}

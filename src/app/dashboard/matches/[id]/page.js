@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { AppImage } from "@/components/ui/AppImage";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 
@@ -76,7 +77,7 @@ export default function MatchRoomPage() {
             <div className="flex flex-col items-center gap-4 flex-1">
               <div className="w-20 h-20 md:w-28 md:h-28 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center p-2">
                 {match.home_team?.badge_url ? (
-                  <img src={match.home_team.badge_url} alt={match.home_team.name} className="w-full h-full object-contain" />
+                  <AppImage src={match.home_team.badge_url} alt={match.home_team.name} className="w-full h-full object-contain" />
                 ) : (
                   <span className="text-4xl">🛡️</span>
                 )}
@@ -102,7 +103,7 @@ export default function MatchRoomPage() {
             <div className="flex flex-col items-center gap-4 flex-1">
               <div className="w-20 h-20 md:w-28 md:h-28 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center p-2">
                 {match.away_team?.badge_url ? (
-                  <img src={match.away_team.badge_url} alt={match.away_team.name} className="w-full h-full object-contain" />
+                  <AppImage src={match.away_team.badge_url} alt={match.away_team.name} className="w-full h-full object-contain" />
                 ) : (
                   <span className="text-4xl">🛡️</span>
                 )}

@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { useConfirmation } from "@/hooks/useConfirmation";
+import { useDeferredEffect } from "@/hooks/useDeferredEffect";
+import { AppImage } from "@/components/ui/AppImage";
 
 export default function AdminArbitrationPage() {
   const [activeTab, setActiveTab] = useState("matches"); // "matches" | "trades"
@@ -27,15 +31,12 @@ export default function AdminArbitrationPage() {
 
   // Alerta inline
   const [alert, setAlert] = useState(null);
+  const { requestConfirmation, confirmationProps } = useConfirmation();
 
   const triggerAlert = (type, message) => {
     setAlert({ type, message });
     setTimeout(() => setAlert(null), 5000);
   };
-
-  useEffect(() => {
-    loadData();
-  }, [activeTab]);
 
   const loadData = async () => {
     setLoading(true);
@@ -82,6 +83,8 @@ export default function AdminArbitrationPage() {
       setLoading(false);
     }
   };
+
+  useDeferredEffect(() => loadData(), activeTab);
 
   // Carregar elencos ao abrir modal de reporte
   const openMatchArbitration = async (match) => {
@@ -212,10 +215,13 @@ export default function AdminArbitrationPage() {
 
   // Resetar partida (voltar a pendente)
   const handleResetMatch = async (match) => {
-    const confirm = window.confirm(
-      "Deseja resetar esta partida? Isso apagará gols, assistências, cartões e placares, voltando o status para PENDENTE."
-    );
-    if (!confirm) return;
+    const confirmed = await requestConfirmation({
+      title: "Reabrir partida",
+      message: "Placar e eventos serão removidos, e a partida voltará a aguardar um novo reporte.",
+      confirmLabel: "Reabrir partida",
+      intent: "danger",
+    });
+    if (!confirmed) return;
 
     setActionLoading(match.id);
     try {
@@ -237,10 +243,13 @@ export default function AdminArbitrationPage() {
 
   // Forçar aceitação de Troca
   const handleForceAcceptTrade = async (trade) => {
-    const confirm = window.confirm(
-      `Tem certeza de que deseja FORÇAR a aprovação desta troca entre ${trade.sender?.name} e ${trade.receiver?.name}?`
-    );
-    if (!confirm) return;
+    const confirmed = await requestConfirmation({
+      title: "Aprovar troca pela administração",
+      message: `A troca entre ${trade.sender?.name} e ${trade.receiver?.name} será processada imediatamente, com validações financeiras e de elenco.`,
+      confirmLabel: "Aprovar troca",
+      intent: "danger",
+    });
+    if (!confirmed) return;
 
     setActionLoading(trade.id);
     try {
@@ -263,8 +272,13 @@ export default function AdminArbitrationPage() {
 
   // Cancelar Troca
   const handleCancelTrade = async (trade) => {
-    const confirm = window.confirm("Deseja cancelar esta proposta de troca definitivamente?");
-    if (!confirm) return;
+    const confirmed = await requestConfirmation({
+      title: "Cancelar proposta",
+      message: "A proposta será encerrada e não poderá mais ser aceita.",
+      confirmLabel: "Cancelar proposta",
+      intent: "danger",
+    });
+    if (!confirmed) return;
 
     setActionLoading(trade.id);
     try {
@@ -316,6 +330,7 @@ export default function AdminArbitrationPage() {
 
   return (
     <div className="space-y-8">
+      <ConfirmDialog {...confirmationProps} />
       {/* Cabeçalho */}
       <div>
         <h1 className="text-3xl font-extrabold text-white tracking-tight">Arbitragem Administrativa</h1>
@@ -422,7 +437,7 @@ export default function AdminArbitrationPage() {
 
                     {match.status === "dispute" && (
                       <p className="text-xs text-red-300 bg-red-500/10 border border-red-500/10 px-3 py-2 rounded-lg italic">
-                        Motivo da disputa: "{match.dispute_reason}"
+                        Motivo da disputa: &quot;{match.dispute_reason}&quot;
                         {match.dispute_proof_url && (
                           <a
                             href={match.dispute_proof_url}
@@ -501,7 +516,7 @@ export default function AdminArbitrationPage() {
                           {sendPlayers.map(p => (
                             <div key={p.players?.id} className="flex items-center gap-1.5 p-1.5 rounded-lg bg-white/5 border border-white/5">
                               {p.players?.face_url ? (
-                                <img src={p.players.face_url} alt="" className="h-6 w-6 rounded-full object-cover" />
+                                <AppImage src={p.players.face_url} alt="" className="h-6 w-6 rounded-full object-cover" />
                               ) : (
                                 <span className="text-xs">👤</span>
                               )}
@@ -527,7 +542,7 @@ export default function AdminArbitrationPage() {
                           {receivePlayers.map(p => (
                             <div key={p.players?.id} className="flex items-center gap-1.5 p-1.5 rounded-lg bg-white/5 border border-white/5">
                               {p.players?.face_url ? (
-                                <img src={p.players.face_url} alt="" className="h-6 w-6 rounded-full object-cover" />
+                                <AppImage src={p.players.face_url} alt="" className="h-6 w-6 rounded-full object-cover" />
                               ) : (
                                 <span className="text-xs">👤</span>
                               )}

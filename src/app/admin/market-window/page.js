@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { adminService } from "@/services/adminService";
+import { useDeferredEffect } from "@/hooks/useDeferredEffect";
 
 export default function MarketWindowPage() {
   const [season, setSeason] = useState(null);
@@ -32,7 +33,7 @@ export default function MarketWindowPage() {
     }
   };
 
-  useEffect(() => { loadSeason(); }, []);
+  useDeferredEffect(loadSeason);
 
   const handleToggleMarket = async (newValue) => {
     if (!season) return;

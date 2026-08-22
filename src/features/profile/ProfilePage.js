@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { isStrongPassword } from "@/lib/auth/password-policy";
+import { AppImage } from "@/components/ui/AppImage";
 
 // ─── Tooltip ℹ️ ─────────────────────────────────
 function Tooltip({ content }) {
@@ -422,7 +423,7 @@ export default function ProfilePage() {
                     <div className="flex gap-6 items-center">
                       <div className="flex flex-col items-center gap-1.5">
                         <div className="w-16 h-16 rounded-xl bg-black/20 flex items-center justify-center border border-white/5 overflow-hidden p-2">
-                          <img src={badgeUrl} alt="Escudo Time" className="max-w-full max-h-full object-contain" onError={(e) => e.target.style.display = 'none'} />
+                          <AppImage src={badgeUrl} alt="Escudo Time" className="max-w-full max-h-full object-contain" onError={(e) => e.target.style.display = 'none'} />
                         </div>
                       </div>
                     </div>

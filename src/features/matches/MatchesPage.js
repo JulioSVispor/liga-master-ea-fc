@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { AppImage } from "@/components/ui/AppImage";
+import { useDeferredEffect } from "@/hooks/useDeferredEffect";
 
 // ─── Tooltip ℹ️ ─────────────────────────────────
 function Tooltip({ content }) {
@@ -341,9 +343,7 @@ export default function MatchesPage() {
     });
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useDeferredEffect(loadData);
 
   const triggerAlert = (type, message) => {
     setAlert({ type, message });
@@ -739,7 +739,7 @@ export default function MatchesPage() {
                                 title="Ver elenco e tática"
                               >
                                 {match.home_team?.badge_url && (
-                                  <img src={match.home_team.badge_url} alt="" className="w-4 h-4 object-contain inline-block" />
+                                  <AppImage src={match.home_team.badge_url} alt="" className="w-4 h-4 object-contain inline-block" />
                                 )}
                                 <span>{match.home_team?.name}</span>
                               </button>
@@ -752,7 +752,7 @@ export default function MatchesPage() {
                                 title="Ver elenco e tática"
                               >
                                 {match.away_team?.badge_url && (
-                                  <img src={match.away_team.badge_url} alt="" className="w-4 h-4 object-contain inline-block" />
+                                  <AppImage src={match.away_team.badge_url} alt="" className="w-4 h-4 object-contain inline-block" />
                                 )}
                                 <span>{match.away_team?.name}</span>
                               </button>
@@ -824,7 +824,7 @@ export default function MatchesPage() {
                       title="Ver elenco e tática"
                     >
                       {match.home_team?.badge_url && (
-                        <img src={match.home_team.badge_url} alt="" className="w-4 h-4 object-contain inline-block" />
+                        <AppImage src={match.home_team.badge_url} alt="" className="w-4 h-4 object-contain inline-block" />
                       )}
                       <span>{match.home_team?.name}</span>
                     </button>
@@ -837,7 +837,7 @@ export default function MatchesPage() {
                       title="Ver elenco e tática"
                     >
                       {match.away_team?.badge_url && (
-                        <img src={match.away_team.badge_url} alt="" className="w-4 h-4 object-contain inline-block" />
+                        <AppImage src={match.away_team.badge_url} alt="" className="w-4 h-4 object-contain inline-block" />
                       )}
                       <span>{match.away_team?.name}</span>
                     </button>
@@ -1234,7 +1234,7 @@ export default function MatchesPage() {
                                  {slot.title}
                                </span>
                                {slot.player.face_url ? (
-                                 <img src={slot.player.face_url} alt="" className="h-full w-full object-cover scale-110" />
+                                 <AppImage src={slot.player.face_url} alt="" className="h-full w-full object-cover scale-110" />
                                ) : (
                                  <span className="text-sm">👤</span>
                                )}
@@ -1307,7 +1307,7 @@ export default function MatchesPage() {
                               <div className="flex items-center gap-2">
                                 <div className="h-6 w-6 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                                   {p.face_url ? (
-                                    <img src={p.face_url} alt="" className="h-full w-full object-cover scale-110" />
+                                    <AppImage src={p.face_url} alt="" className="h-full w-full object-cover scale-110" />
                                   ) : (
                                     <span>👤</span>
                                   )}

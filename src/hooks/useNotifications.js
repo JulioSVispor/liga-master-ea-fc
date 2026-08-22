@@ -37,7 +37,7 @@ export function useNotifications(userId) {
   useEffect(() => {
     if (!userId) return;
 
-    loadNotifications();
+    const initialLoad = window.setTimeout(loadNotifications, 0);
 
     const channel = supabase
       .channel(`user-notifications-${userId}`)
@@ -67,6 +67,7 @@ export function useNotifications(userId) {
     }, 20000);
 
     return () => {
+      window.clearTimeout(initialLoad);
       supabase.removeChannel(channel);
       clearInterval(interval);
     };

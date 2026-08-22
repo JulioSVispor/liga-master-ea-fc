@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { adminService } from "@/services/adminService";
+import { AppImage } from "@/components/ui/AppImage";
+import { useDeferredEffect } from "@/hooks/useDeferredEffect";
 
 // ─── Tooltip ℹ️ ─────────────────────────────────
 function Tooltip({ content }) {
@@ -200,9 +202,7 @@ export default function AdminUsersPage() {
     }
   };
 
-  useEffect(() => {
-    loadUsers();
-  }, []);
+  useDeferredEffect(loadUsers);
 
   // Alterar role do usuário (admin <-> user)
   const handleToggleRole = (userId, currentRole) => {
@@ -778,7 +778,7 @@ export default function AdminUsersPage() {
                               <tr key={player.id} className="hover:bg-white/[0.01]">
                                 <td className="px-4 py-3 flex items-center gap-2">
                                   {player.face_url ? (
-                                    <img src={player.face_url} alt="" className="h-7 w-7 rounded-full object-cover" />
+                                    <AppImage src={player.face_url} alt="" className="h-7 w-7 rounded-full object-cover" />
                                   ) : (
                                     <span className="text-sm">👤</span>
                                   )}
@@ -932,7 +932,7 @@ export default function AdminUsersPage() {
                             <tr key={player.id} className="hover:bg-white/[0.01]">
                               <td className="px-4 py-3 flex items-center gap-2">
                                 {player.face_url ? (
-                                  <img src={player.face_url} alt="" className="h-7 w-7 rounded-full object-cover" />
+                                  <AppImage src={player.face_url} alt="" className="h-7 w-7 rounded-full object-cover" />
                                 ) : (
                                   <span className="text-sm">👤</span>
                                 ) }

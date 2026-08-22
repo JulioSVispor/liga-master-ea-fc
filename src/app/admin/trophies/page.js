@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { adminCommandService } from "@/services/adminCommandService";
+import { AppImage } from "@/components/ui/AppImage";
+import { useDeferredEffect } from "@/hooks/useDeferredEffect";
 
 const INPUT_STYLE =
   "w-full bg-[#090d16] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#10b981] transition-colors";
@@ -70,7 +72,7 @@ export default function AdminTrophiesPage() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useDeferredEffect(load);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -211,7 +213,7 @@ export default function AdminTrophiesPage() {
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center overflow-hidden flex-shrink-0">
                     {trophy.image_url ? (
-                      <img src={trophy.image_url} alt={trophy.name} className="w-full h-full object-contain" />
+                      <AppImage src={trophy.image_url} alt={trophy.name} className="w-full h-full object-contain" />
                     ) : (
                       <span className="text-2xl">🏅</span>
                     )}

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { AppImage } from "@/components/ui/AppImage";
 
 import { useNotifications } from "@/hooks/useNotifications";
 import { useTeamFinancials } from "@/hooks/useTeamFinancials";
@@ -116,7 +117,7 @@ export default function DashboardLayoutClient({ children, initialProfile, initia
           <div className="p-6 border-b border-white/5 space-y-4">
             <div className="flex items-center gap-3">
               {team.badge_url ? (
-                <img
+                <AppImage
                   src={team.badge_url}
                   alt={team.name}
                   className="h-10 w-10 rounded-xl object-contain bg-white/5 border border-white/10"

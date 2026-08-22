@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { useConfirmation } from "@/hooks/useConfirmation";
+import { useDeferredEffect } from "@/hooks/useDeferredEffect";
 
 export default function AdminDisputesPage() {
   const [disputes, setDisputes] = useState([]);
@@ -13,10 +16,7 @@ export default function AdminDisputesPage() {
   const [forceAwayScore, setForceAwayScore] = useState("");
   
   const [alert, setAlert] = useState(null);
-
-  useEffect(() => {
-    loadDisputes();
-  }, []);
+  const { requestConfirmation, confirmationProps } = useConfirmation();
 
   const triggerAlert = (type, message) => {
     setAlert({ type, message });
@@ -45,10 +45,16 @@ export default function AdminDisputesPage() {
     setLoading(false);
   };
 
+  useDeferredEffect(() => loadDisputes());
+
   // 1. Confirmar placar reportado originalmente
   const handleConfirmOriginal = async (match) => {
-    const confirm = window.confirm("Tem certeza que deseja confirmar o placar originalmente reportado?");
-    if (!confirm) return;
+    const confirmed = await requestConfirmation({
+      title: "Homologar placar reportado",
+      message: "O resultado reportado será confirmado e a classificação será recalculada.",
+      confirmLabel: "Homologar resultado",
+    });
+    if (!confirmed) return;
 
     const { data, error } = await supabase.rpc("resolve_match", {
       p_match_id: match.id,
@@ -78,8 +84,13 @@ export default function AdminDisputesPage() {
       return;
     }
 
-    const confirm = window.confirm(`Deseja forçar o placar de ${forceHomeScore} x ${forceAwayScore} e confirmar o jogo?`);
-    if (!confirm) return;
+    const confirmed = await requestConfirmation({
+      title: "Definir placar pela arbitragem",
+      message: `O placar ${forceHomeScore} x ${forceAwayScore} será homologado e substituirá o resultado contestado.`,
+      confirmLabel: "Definir e homologar",
+      intent: "danger",
+    });
+    if (!confirmed) return;
 
     const { data, error } = await supabase.rpc("resolve_match", {
       p_match_id: selectedDispute.id,
@@ -104,10 +115,13 @@ export default function AdminDisputesPage() {
 
   // 3. Cancelar reporte e voltar para pendente
   const handleResetMatch = async (match) => {
-    const confirm = window.confirm(
-      "Deseja resetar esta partida? Isso apagará os gols, assistências, cartões e o placar, voltando o status para PENDENTE."
-    );
-    if (!confirm) return;
+    const confirmed = await requestConfirmation({
+      title: "Reabrir partida",
+      message: "Placar, gols, assistências e cartões serão removidos. A partida voltará a aguardar um novo reporte.",
+      confirmLabel: "Reabrir partida",
+      intent: "danger",
+    });
+    if (!confirmed) return;
 
     const { error: matchError } = await supabase.rpc("reopen_match", {
       p_match_id: match.id,
@@ -125,6 +139,7 @@ export default function AdminDisputesPage() {
 
   return (
     <div className="space-y-8">
+      <ConfirmDialog {...confirmationProps} />
       {/* Cabeçalho */}
       <div>
         <h1 className="text-3xl font-extrabold text-white tracking-tight">Disputas de Jogos</h1>
@@ -236,7 +251,7 @@ export default function AdminDisputesPage() {
                   </div>
                   <div>
                     <span className="text-gray-400 uppercase font-semibold text-[9px] tracking-wider block">Motivo da Contestação:</span>
-                    <span className="text-red-300 italic">"{selectedDispute.dispute_reason || "Sem descrição informada"}"</span>
+                    <span className="text-red-300 italic">&quot;{selectedDispute.dispute_reason || "Sem descrição informada"}&quot;</span>
                   </div>
                   {selectedDispute.dispute_proof_url && (
                     <div className="pt-2">

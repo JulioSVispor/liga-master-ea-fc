@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { adminCommandService } from "@/services/adminCommandService";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { useConfirmation } from "@/hooks/useConfirmation";
+import { useDeferredEffect } from "@/hooks/useDeferredEffect";
 
 export default function InvitesPage() {
   const [emails, setEmails] = useState([]);
@@ -12,6 +15,7 @@ export default function InvitesPage() {
   const [newDisplayName, setNewDisplayName] = useState("");
   const [saving, setSaving] = useState(false);
   const [alert, setAlert] = useState(null);
+  const { requestConfirmation, confirmationProps } = useConfirmation();
 
   const showAlert = (type, message) => {
     setAlert({ type, message });
@@ -33,7 +37,7 @@ export default function InvitesPage() {
     }
   };
 
-  useEffect(() => { loadEmails(); }, []);
+  useDeferredEffect(loadEmails);
 
   const handleAdd = async (e) => {
     e.preventDefault();
@@ -54,7 +58,13 @@ export default function InvitesPage() {
   };
 
   const handleRemove = async (id, email) => {
-    if (!confirm(`Remover ${email} da whitelist?`)) return;
+    const confirmed = await requestConfirmation({
+      title: "Remover convite",
+      message: `Remover ${email} da whitelist? Convites já utilizados não podem ser excluídos.`,
+      confirmLabel: "Remover convite",
+      intent: "danger",
+    });
+    if (!confirmed) return;
     try {
       await adminCommandService.removeInvite(id);
       showAlert("success", `${email} removido da lista.`);
@@ -69,6 +79,7 @@ export default function InvitesPage() {
 
   return (
     <div className="space-y-6">
+      <ConfirmDialog {...confirmationProps} />
       {/* Alert */}
       {alert && (
         <div className={`p-3 rounded-xl text-sm border flex items-center gap-2 animate-fadeIn ${
@@ -174,7 +185,7 @@ export default function InvitesPage() {
             <div className="text-center py-12 text-gray-500">
               <p className="text-4xl mb-2">📋</p>
               <p className="text-sm">Nenhum e-mail cadastrado ainda.</p>
-              <p className="text-xs mt-1">Clique em "Adicionar E-mail" para convidar um participante.</p>
+              <p className="text-xs mt-1">Clique em &quot;Adicionar E-mail&quot; para convidar um participante.</p>
             </div>
           )}
         </>

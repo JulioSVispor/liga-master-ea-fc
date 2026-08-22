@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import { supabase } from "@/lib/supabase";
+import { AppImage } from "@/components/ui/AppImage";
 
 const FORMATIONS = {
   "4-3-3": [
@@ -99,6 +99,7 @@ export default function LineupEditor({ team, players, onTeamUpdate }) {
   const [dragOverSlot, setDragOverSlot] = useState(null);
   const [savingFormation, setSavingFormation] = useState(false);
   const [savingEscalation, setSavingEscalation] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const getFormationSlots = () => {
     const slots = FORMATIONS[team.formation] || FORMATIONS["4-3-3"];
@@ -182,6 +183,7 @@ export default function LineupEditor({ team, players, onTeamUpdate }) {
 
   const handleDropPlayerOnSlot = async (player, slotIndex) => {
     setSavingEscalation(true);
+    setSaveError("");
     try {
       const currentLineup = Array.isArray(team.lineup) ? [...team.lineup] : Array(11).fill(null);
       const isLineupEmpty = !currentLineup.some((id) => id !== null && id !== undefined);
@@ -205,11 +207,13 @@ export default function LineupEditor({ team, players, onTeamUpdate }) {
       });
       if (error) {
         console.error("Erro Supabase:", error);
-        alert("Erro ao salvar escalação: " + error.message);
+        onTeamUpdate(team);
+        setSaveError("Não foi possível salvar a escalação. A alteração visual foi desfeita.");
       }
     } catch (err) {
       console.error("Erro ao salvar escalação:", err);
-      alert("Erro ao processar escalação.");
+      onTeamUpdate(team);
+      setSaveError("Não foi possível processar a escalação. Tente novamente.");
     } finally {
       setSavingEscalation(false);
     }
@@ -236,6 +240,11 @@ export default function LineupEditor({ team, players, onTeamUpdate }) {
 
   return (
     <div className="glass-panel p-6 sm:p-8 rounded-2xl border border-white/5 bg-[#090d16]/75 space-y-6">
+      {saveError && (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300" role="alert">
+          {saveError}
+        </div>
+      )}
       {/* Header com seletor de formação */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-white/5 pb-4">
         <div>
@@ -313,7 +322,7 @@ export default function LineupEditor({ team, players, onTeamUpdate }) {
                         <span className="absolute top-1 left-1 text-[10px] font-black bg-[#060913]/85 rounded px-1 leading-none shadow-sm z-10 text-[#10b981]">{slot.player.rating}</span>
                         <span className="absolute bottom-1 right-1 text-[8px] font-bold text-gray-300 bg-[#060913]/85 rounded px-1 leading-none uppercase z-10">{slot.title}</span>
                         {slot.player.face_url ? (
-                          <img src={slot.player.face_url} alt={slot.player.name} className="h-full w-full object-contain object-bottom" draggable={false} />
+                          <AppImage src={slot.player.face_url} alt={slot.player.name} className="h-full w-full object-contain object-bottom" draggable={false} />
                         ) : (
                           <span className="text-xl">👤</span>
                         )}
@@ -362,7 +371,7 @@ export default function LineupEditor({ team, players, onTeamUpdate }) {
                     <span className="absolute top-1.5 left-1.5 text-[9px] font-extrabold text-[#10b981] bg-[#060913]/80 px-1 rounded leading-none">{player.rating}</span>
                     <span className="absolute top-1.5 right-1.5 text-[7px] font-bold text-gray-400 uppercase bg-[#060913]/80 px-1 rounded leading-none">{player.position}</span>
                     <div className="h-11 w-11 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden mt-3 mb-1">
-                      {player.face_url ? <img src={player.face_url} alt="" className="h-full w-full object-contain object-bottom" draggable={false} /> : <span className="text-lg">👤</span>}
+                      {player.face_url ? <AppImage src={player.face_url} alt="" className="h-full w-full object-contain object-bottom" draggable={false} /> : <span className="text-lg">👤</span>}
                     </div>
                     <p className="text-[9px] font-bold text-white truncate w-full text-center leading-tight">{player.name.split(" ").slice(-1)[0]}</p>
                     <p className="text-[7px] text-gray-500 mt-0.5">arrastar ↑</p>

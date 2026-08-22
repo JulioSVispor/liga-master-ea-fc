@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import Papa from "papaparse";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { useConfirmation } from "@/hooks/useConfirmation";
 
 export default function AdminImport() {
   const [file, setFile] = useState(null);
@@ -13,6 +15,7 @@ export default function AdminImport() {
   const [eaImporting, setEaImporting] = useState(false);
   const [eaProgress, setEaProgress] = useState(0);
   const [eaStatus, setEaStatus] = useState("");
+  const { requestConfirmation, confirmationProps } = useConfirmation();
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -24,9 +27,11 @@ export default function AdminImport() {
 
 
   const handleEAImport = async () => {
-    const confirmImport = window.confirm(
-      "Deseja iniciar a importação em lote de toda a base oficial do EA FC? Isso importará mais de 15.000 jogadores em lotes de 100 diretamente da API da EA."
-    );
+    const confirmImport = await requestConfirmation({
+      title: "Importar base oficial",
+      message: "A operação consultará a API da EA e atualizará mais de 15.000 jogadores em lotes. Os vínculos atuais com clubes serão preservados.",
+      confirmLabel: "Iniciar importação",
+    });
     if (!confirmImport) return;
 
     setEaImporting(true);
@@ -72,7 +77,7 @@ export default function AdminImport() {
 
   const handleImport = () => {
     if (!file) {
-      alert("Por favor, selecione um arquivo CSV primeiro.");
+      setStatus("Selecione um arquivo CSV antes de iniciar a importação.");
       return;
     }
 
@@ -182,6 +187,7 @@ export default function AdminImport() {
 
   return (
     <div className="space-y-8">
+      <ConfirmDialog {...confirmationProps} />
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
           Importador de Jogadores (CSV)

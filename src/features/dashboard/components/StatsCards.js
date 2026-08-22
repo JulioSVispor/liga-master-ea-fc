@@ -1,6 +1,28 @@
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/Card";
 
+function Tooltip({ content }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <span
+      className="relative ml-1 inline-block cursor-help select-none text-gray-500 hover:text-white"
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+      onFocus={() => setVisible(true)}
+      onBlur={() => setVisible(false)}
+      tabIndex={0}
+    >
+      <span aria-hidden="true">ℹ️</span>
+      <span className="sr-only">Mais informações</span>
+      {visible && (
+        <span role="tooltip" className="absolute left-1/2 top-6 z-50 w-56 -translate-x-1/2 rounded-xl border border-gray-800 bg-[#060913] p-3 text-[10px] font-normal normal-case leading-relaxed text-gray-200 shadow-2xl">
+          {content}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export default function StatsCards({ team, players, settings }) {
   if (!team) return null;
 
@@ -9,25 +31,6 @@ export default function StatsCards({ team, players, settings }) {
     players.length > 0
       ? Math.round(players.reduce((sum, p) => sum + p.rating, 0) / players.length)
       : 0;
-
-  // Tooltip UI Simplificado Interno
-  const Tooltip = ({ content }) => {
-    const [visible, setVisible] = useState(false);
-    return (
-      <span 
-        className="relative inline-block ml-1 cursor-pointer group text-gray-500 hover:text-white select-none"
-        onMouseEnter={() => setVisible(true)}
-        onMouseLeave={() => setVisible(false)}
-      >
-        ℹ️
-        {visible && (
-          <span className="absolute z-[100] w-56 p-3 text-[10px] font-normal text-gray-200 bg-[#060913] border border-gray-800 rounded-xl shadow-2xl top-6 left-1/2 -translate-x-1/2 leading-relaxed transition-opacity animate-fadeIn normal-case whitespace-normal">
-            {content}
-          </span>
-        )}
-      </span>
-    );
-  };
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-fadeIn">

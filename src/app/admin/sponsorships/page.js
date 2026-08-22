@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { adminCommandService } from "@/services/adminCommandService";
+import { useDeferredEffect } from "@/hooks/useDeferredEffect";
 
 const INPUT_STYLE =
   "w-full bg-[#090d16] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#10b981] transition-colors";
@@ -62,7 +63,7 @@ export default function AdminSponsorshipsPage() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useDeferredEffect(load);
 
   const handleCreate = async (e) => {
     e.preventDefault();

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
+import { AppImage } from "@/components/ui/AppImage";
 
 export default function HallOfFamePage() {
   const [loading, setLoading] = useState(true);
@@ -149,7 +150,7 @@ export default function HallOfFamePage() {
                 {achievements.map((ach) => (
                   <div key={ach.id} className="p-4 rounded-xl border border-white/5 bg-white/[0.02] flex items-center gap-4 group hover:bg-white/[0.04] transition-colors">
                     <div className="h-12 w-12 rounded-full bg-[#060913] border border-white/10 flex flex-shrink-0 items-center justify-center p-2">
-                      <img src={ach.teams?.badge_url || "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/300px-No_image_available.svg.png"} alt="" className="max-w-full max-h-full object-contain" />
+                      <AppImage src={ach.teams?.badge_url || "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/300px-No_image_available.svg.png"} alt="" className="max-w-full max-h-full object-contain" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <Link href={`/dashboard/teams/${ach.teams?.id}`}>
@@ -216,7 +217,7 @@ export default function HallOfFamePage() {
                           <Link href={`/dashboard/teams/${team.id}`}>
                             <div className="flex items-center gap-3 cursor-pointer group">
                               <div className="h-8 w-8 rounded-full bg-[#060913] border border-white/10 flex items-center justify-center p-1.5 group-hover:border-blue-500 transition-colors">
-                                <img src={team.badge_url || "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/300px-No_image_available.svg.png"} alt="" className="max-w-full max-h-full object-contain" />
+                                <AppImage src={team.badge_url || "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/300px-No_image_available.svg.png"} alt="" className="max-w-full max-h-full object-contain" />
                               </div>
                               <div>
                                 <h4 className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors">{team.profiles?.display_name || "Treinador Desconhecido"}</h4>

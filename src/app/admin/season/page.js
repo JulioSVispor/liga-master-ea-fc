@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { adminService } from "@/services/adminService";
+import { AppImage } from "@/components/ui/AppImage";
 
 function StatCard({ title, icon, children }) {
   return (
@@ -764,7 +765,7 @@ export default function AdminSeasonPage() {
                         <td className="py-2.5 pr-3">
                           <div className="flex items-center gap-2">
                             {s.teams?.badge_url ? (
-                              <img src={s.teams.badge_url} alt="" className="w-5 h-5 rounded object-contain" />
+                              <AppImage src={s.teams.badge_url} alt="" className="w-5 h-5 rounded object-contain" />
                             ) : (
                               <span className="text-sm">🛡️</span>
                             )}

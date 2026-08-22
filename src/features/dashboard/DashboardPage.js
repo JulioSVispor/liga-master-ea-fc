@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { AppImage } from "@/components/ui/AppImage";
+import { useDeferredEffect } from "@/hooks/useDeferredEffect";
 import LineupEditor from "./components/LineupEditor";
 import StatsCards from "./components/StatsCards";
 import NextMatchBanner from "./components/NextMatchBanner";
@@ -30,6 +33,7 @@ function Tooltip({ content }) {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [team, setTeam] = useState(null);
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -152,10 +156,10 @@ export default function DashboardPage() {
     }
   };
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     loadClubData();
     loadSettings();
-  }, []);
+  });
 
   const squadWages = players.reduce((sum, p) => sum + parseFloat(p.wage || 0), 0);
   const avgRating =
@@ -237,7 +241,7 @@ export default function DashboardPage() {
         <h2 className="text-xl font-bold text-white mb-2">Nenhum Clube Encontrado</h2>
         <p className="text-sm text-gray-400 mb-6">Sua conta não possui uma equipe associada nesta liga.</p>
         <button
-          onClick={async () => { await supabase.auth.signOut(); window.location.href = "/register"; }}
+          onClick={async () => { await supabase.auth.signOut(); router.push("/register"); }}
           className="rounded-xl bg-[#10b981] hover:bg-[#059669] px-6 py-2.5 text-sm font-semibold text-white shadow-lg transition-all"
         >
           Registrar Novo Time
@@ -304,7 +308,7 @@ export default function DashboardPage() {
                       className="h-10 w-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden mx-auto flex-shrink-0 cursor-pointer hover:border-[#10b981] transition-all"
                     >
                       {player.face_url ? (
-                        <img src={player.face_url} alt="" className="h-full w-full object-cover scale-110" draggable={false} />
+                        <AppImage src={player.face_url} alt="" className="h-full w-full object-cover scale-110" draggable={false} />
                       ) : (
                         <span className="text-base text-gray-500">👤</span>
                       )}
@@ -379,7 +383,7 @@ export default function DashboardPage() {
           {team && (
             <div className="relative group select-none">
               {team.badge_url ? (
-                <img src={team.badge_url} alt={team.name} className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl object-contain bg-white/5 border border-white/10 p-1.5 transition-all group-hover:scale-105 duration-200" />
+                <AppImage src={team.badge_url} alt={team.name} className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl object-contain bg-white/5 border border-white/10 p-1.5 transition-all group-hover:scale-105 duration-200" />
               ) : (
                 <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl bg-[#3b82f6]/10 text-[#3b82f6] flex items-center justify-center font-bold border border-[#3b82f6]/20 text-3xl transition-all group-hover:scale-105 duration-200">🛡️</div>
               )}

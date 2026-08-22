@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useDeferredEffect } from "@/hooks/useDeferredEffect";
 import { supabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
 import PlayerProfileModal from "@/features/dashboard/components/PlayerProfileModal";
@@ -116,7 +117,7 @@ export default function Market() {
   };
 
   // Carregar dados principais
-  useEffect(() => {
+  useDeferredEffect(() => {
     async function loadData() {
       setLoading(true);
       try {
@@ -154,10 +155,10 @@ export default function Market() {
     }
 
     loadData();
-  }, [activeTab]);
+  }, activeTab);
 
   // Carrega propostas de trocas enviadas e recebidas e outros times
-  const loadTradesData = async (myTeamId) => {
+  async function loadTradesData(myTeamId) {
     try {
       // 1. Outros times para propor trocas
       const allTeams = await teamService.getAllTeams();
@@ -173,7 +174,7 @@ export default function Market() {
     } catch (err) {
       console.error("Erro ao carregar dados de trocas e empréstimos:", err);
     }
-  };
+  }
 
   // Carregar mensagens do Chat de Negociação
   const loadChatMessages = async (chat) => {
@@ -186,7 +187,7 @@ export default function Market() {
   };
 
   // Polling para Chat
-  useEffect(() => {
+  useDeferredEffect(() => {
     if (!activeChat) return;
 
     loadChatMessages(activeChat);
@@ -195,7 +196,7 @@ export default function Market() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [activeChat]);
+  }, activeChat ? `${activeChat.type}:${activeChat.id}` : "no-chat");
 
   // Enviar Mensagem no Chat
   const handleSendMessage = async (e) => {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { AppImage } from "@/components/ui/AppImage";
 import Link from "next/link";
 import PlayerProfileModal from "@/features/dashboard/components/PlayerProfileModal";
 
@@ -142,7 +143,7 @@ export default function PublicTeamProfilePage() {
         
         <div className="relative z-10 pt-16 px-8 pb-8 flex flex-col md:flex-row items-start md:items-end gap-6">
           <div className="h-32 w-32 rounded-2xl bg-[#060913] border-4 border-[#090d16] flex items-center justify-center shadow-2xl p-2 overflow-hidden flex-shrink-0">
-            <img src={team.badge_url || "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/300px-No_image_available.svg.png"} alt="Escudo" className="max-w-full max-h-full object-contain" />
+            <AppImage src={team.badge_url || "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/300px-No_image_available.svg.png"} alt="Escudo" className="max-w-full max-h-full object-contain" />
           </div>
           
           <div className="flex-1">
@@ -259,7 +260,7 @@ export default function PublicTeamProfilePage() {
                           <div className="flex items-center gap-3">
                             <div className="h-8 w-8 rounded-full bg-[#060913] border border-white/10 flex flex-shrink-0 items-center justify-center overflow-hidden">
                               {player.face_url ? (
-                                <img src={player.face_url} alt="" className="h-full w-full object-cover scale-110" />
+                                <AppImage src={player.face_url} alt="" className="h-full w-full object-cover scale-110" />
                               ) : (
                                 <span>👤</span>
                               )}

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { AppImage } from "@/components/ui/AppImage";
 
 export default function AuctionModal({ isOpen, onClose, player, team, onSuccess }) {
   const [error, setError] = useState("");
@@ -43,7 +44,7 @@ export default function AuctionModal({ isOpen, onClose, player, team, onSuccess 
       <div className="flex items-center gap-3 mb-6 p-4 rounded-xl bg-[#03050a] border border-gray-800">
         <div className="h-12 w-12 rounded-full bg-gray-800 flex items-center justify-center overflow-hidden flex-shrink-0">
           {player.face_url ? (
-            <img src={player.face_url} alt="" className="h-full w-full object-cover scale-110" />
+            <AppImage src={player.face_url} alt="" className="h-full w-full object-cover scale-110" />
           ) : (
             <span className="text-xl">👤</span>
           )}

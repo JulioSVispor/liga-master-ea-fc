@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { AppImage } from "@/components/ui/AppImage";
 
 /**
  * Visualização de Mercado em Grade (Estilo Transfermarkt/FUT).
@@ -54,7 +55,7 @@ export default function AuctionListings({
               <div className="absolute inset-0 bg-gradient-to-t from-[#090d16] via-transparent to-transparent opacity-80 z-0"></div>
               
               {player?.face_url ? (
-                <img src={player.face_url} alt={player?.name} className="h-36 object-contain z-10 transition-transform group-hover:scale-105" />
+                <AppImage src={player.face_url} alt={player?.name} className="h-36 object-contain z-10 transition-transform group-hover:scale-105" />
               ) : (
                 <div className="h-36 w-24 bg-white/5 rounded-t-xl border border-white/10 flex items-center justify-center z-10 mb-2">
                   <span className="text-3xl">👤</span>

@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { PasswordField } from "@/components/ui/PasswordField";
 import { isStrongPassword } from "@/lib/auth/password-policy";
 import { supabase } from "@/lib/supabase";
 
 export default function ResetPasswordPage() {
+  const router = useRouter();
   const [status, setStatus] = useState("checking");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -87,7 +89,7 @@ export default function ResetPasswordPage() {
               <p className="text-sm leading-6 text-gray-300" role="alert">
                 Este link é inválido ou expirou. Solicite uma nova recuperação de senha.
               </p>
-              <Button className="w-full" onClick={() => window.location.assign("/forgot-password")}>
+              <Button className="w-full" onClick={() => router.push("/forgot-password")}>
                 Solicitar novo link
               </Button>
             </div>
@@ -98,7 +100,7 @@ export default function ResetPasswordPage() {
               <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300" role="status">
                 Senha alterada com segurança. Entre novamente para continuar.
               </p>
-              <Button className="w-full" onClick={() => window.location.assign("/login")}>
+              <Button className="w-full" onClick={() => router.push("/login")}>
                 Ir para o login
               </Button>
             </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { AppImage } from "@/components/ui/AppImage";
 
 export default function TradeProposals({
   myTeam,
@@ -154,7 +155,7 @@ function TradeDuelCard({
     <div key={tp.id} className="flex items-center gap-3 py-2 px-3 hover:bg-white/[0.02] transition-colors rounded-xl border border-transparent hover:border-white/5 group">
       <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-gray-800 to-gray-700 flex items-center justify-center overflow-hidden flex-shrink-0 border border-white/10 shadow-sm">
         {tp.players?.face_url ? (
-          <img src={tp.players.face_url} alt="" className="w-full h-full object-cover scale-110" />
+          <AppImage src={tp.players.face_url} alt="" className="w-full h-full object-cover scale-110" />
         ) : (
           <span className="text-xs text-gray-400">👤</span>
         )}

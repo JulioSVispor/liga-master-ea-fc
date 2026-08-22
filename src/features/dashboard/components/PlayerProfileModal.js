@@ -1,6 +1,7 @@
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardContent } from "@/components/ui/Card";
+import { AppImage } from "@/components/ui/AppImage";
 
 export default function PlayerProfileModal({ isOpen, onClose, player, stats, loading }) {
   if (!player) return null;
@@ -10,7 +11,7 @@ export default function PlayerProfileModal({ isOpen, onClose, player, stats, loa
       <div className="flex items-center gap-6 mb-6 p-4 rounded-xl bg-[#03050a] border border-gray-800">
         <div className="h-20 w-20 rounded-full bg-gray-800 flex items-center justify-center overflow-hidden flex-shrink-0 border-2 border-gray-700">
           {player.face_url ? (
-            <img src={player.face_url} alt="" className="h-full w-full object-cover scale-110" />
+            <AppImage src={player.face_url} alt="" className="h-full w-full object-cover scale-110" />
           ) : (
             <span className="text-3xl">👤</span>
           )}

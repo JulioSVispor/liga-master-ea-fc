@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { adminService } from "@/services/adminService";
+import { useDeferredEffect } from "@/hooks/useDeferredEffect";
 
 export default function CommandCenterPage() {
   const [rounds, setRounds] = useState([]);
@@ -28,10 +29,10 @@ export default function CommandCenterPage() {
     setLoading(false);
   };
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     loadSettings();
     loadRounds();
-  }, []);
+  });
 
   const toggleMarket = async (newStatus) => {
     try {

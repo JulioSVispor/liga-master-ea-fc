@@ -27,3 +27,12 @@ Não foi possível inferir por que os scripts SQL são avulsos ou qual deles est
 - Uma liga com resultado, disputa ou súmula reportada não pode ter o calendário regenerado.
 - A classificação é sempre reparada a partir de partidas confirmadas por uma RPC administrativa auditável; nunca por ajustes manuais de pontos.
 - A implantação continua bloqueada até haver backup verificável e validação das migrations em PostgreSQL/Supabase local.
+
+## ADR-003 — Fronteira de comandos administrativos e UX resiliente (2026-08-22)
+
+- Componentes e features não executam `insert`, `update`, `delete` ou `upsert`; consultas permanecem no cliente por compatibilidade, enquanto comandos passam por services.
+- Partidas, calendário, copas, elenco, papéis e finanças usam RPCs transacionais com autorização no banco. CRUD editorial simples usa Route Handler autenticado, payload fechado e service role somente no servidor.
+- Cadastro não possui pré-check público de whitelist: o hook `Before User Created` e o trigger transacional são a única autoridade, com erro genérico.
+- Upload administrativo valida assinatura, tamanho e tipo real no servidor, gera nome aleatório e nunca usa `upsert` arbitrário.
+- Confirmações usam `ConfirmDialog`; imagens remotas usam `AppImage` com dimensões intrínsecas e otimização do Next.js; carregamentos client-side deferidos usam uma chave explícita e cleanup.
+- Reconciliação de usuário Auth órfão é uma ação master auditada e exige nome de participante, clube e clube real; dados ausentes nunca são inventados automaticamente.

@@ -29,12 +29,36 @@ spacing:
   section-gap: "2rem"
   page-max: "90rem"
 components:
-  button: {}
-  card: {}
-  dialog: {}
-  table: {}
-  input: {}
-  toast: {}
+  button:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+  dialog:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.text}"
+  table:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text-muted}"
+  input:
+    backgroundColor: "{colors.background}"
+    textColor: "{colors.text}"
+  toast:
+    backgroundColor: "{colors.danger}"
+    textColor: "{colors.background}"
+  button-hover:
+    backgroundColor: "{colors.primary-hover}"
+    textColor: "{colors.background}"
+  focus-ring:
+    backgroundColor: "{colors.info}"
+    textColor: "{colors.background}"
+  warning-toast:
+    backgroundColor: "{colors.warning}"
+    textColor: "{colors.background}"
+  border-rule:
+    backgroundColor: "{colors.border}"
+    textColor: "{colors.text}"
 ---
 
 # Liga Master Design System

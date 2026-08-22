@@ -1,6 +1,6 @@
 # Administração
 
-O layout `/admin` só exibe o painel após sessão e papel `admin` ou `master` no cliente. O menu cobre competições, janela, encerramento de temporada, usuários/clubes, convites, espera, arbitragem, importação, notícias, troféus, patrocínios, escudos, auditoria e configurações.
+O layout `/admin` valida sessão e papel `admin` ou `master` no servidor antes de renderizar. O menu cobre competições, janela, encerramento de temporada, usuários/clubes, convites, espera, arbitragem, importação, notícias, troféus, patrocínios, escudos, auditoria e configurações.
 
 ## Responsabilidades
 
@@ -9,4 +9,4 @@ O layout `/admin` só exibe o painel após sessão e papel `admin` ou `master` n
 - importar a base de jogadores e manter o conteúdo editorial;
 - controlar configurações e auditar intervenções financeiras.
 
-Autorização client-side melhora UX, mas não é controle suficiente. Toda ação administrativa precisa de RLS/RPC/route handler que valide o papel no servidor.
+O cliente não é autoridade. Operações de domínio usam RPC autorizada e transacional; CRUD administrativo simples usa Route Handler com `requireAdminUser`, validação fechada e service role apenas no servidor. Componentes não fazem mutação direta de tabelas.

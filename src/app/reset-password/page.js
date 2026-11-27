@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
@@ -15,24 +15,30 @@ export default function ResetPasswordPage() {
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const recoveryRequest = useRef(null);
 
   useEffect(() => {
     let active = true;
-    const recoveryType = new URLSearchParams(window.location.hash.slice(1)).get("type");
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (active && event === "PASSWORD_RECOVERY" && session) setStatus("ready");
-    });
-
-    supabase.auth.getSession().then(({ data, error: sessionError }) => {
-      if (active) {
-        setStatus(!sessionError && data.session && recoveryType === "recovery" ? "ready" : "invalid");
+    if (!recoveryRequest.current) {
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get("code");
+      if (!code) {
+        recoveryRequest.current = Promise.resolve(false);
+      } else {
+        url.searchParams.delete("code");
+        window.history.replaceState(window.history.state, "", url);
+        recoveryRequest.current = supabase.auth.exchangeCodeForSession(code)
+          .then(({ data, error }) => !error && Boolean(data.session) && data.redirectType === "recovery")
+          .catch(() => false);
       }
+    }
+
+    recoveryRequest.current.then((valid) => {
+      if (active) setStatus(valid ? "ready" : "invalid");
     });
 
     return () => {
       active = false;
-      authListener.subscription.unsubscribe();
     };
   }, []);
 

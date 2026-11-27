@@ -41,3 +41,8 @@
 - O único usuário Auth órfão não possui convite nem metadados de clube suficientes; a migration fornece reparo master explícito, mas a decisão dos dados pertence à administração.
 - Arquivos acima de 800 linhas: `6 → 0`, com separação de controladores, views e diálogos compartilhados para ligas, usuários, mercado, partidas, scouting e classificação.
 - Ainda pendente: ampliar Playwright autenticado por papel, pgTAP completo, teste concorrente das RPCs e QA visual autenticado nas quatro larguras.
+
+## Autenticação em 2026-11-27
+
+- Sessão do navegador compartilhada com o servidor por cookies e cobertura Playwright de treinador, admin, master e recuperação PKCE em mobile e desktop, com simulador local no CI.
+- Ainda pendente a validação integrada com Supabase real e a cobertura de RLS por papel.

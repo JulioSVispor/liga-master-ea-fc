@@ -9,6 +9,11 @@ const handle = app.getRequestHandler();
 
 await app.prepare();
 
+if (process.env.E2E_AUTH_FIXTURE === "true") {
+  const { startAuthFixture } = await import("../tests/e2e/support/auth-server.mjs");
+  await startAuthFixture();
+}
+
 const server = createServer((request, response) => {
   if (
     shutdownToken &&

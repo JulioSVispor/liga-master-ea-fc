@@ -31,6 +31,8 @@ npm run lint:design
 npm run build
 ```
 
+O CI executa os testes autenticados em desktop e mobile com um simulador local. Para executar a mesma suíte, defina `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321`, `NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder` e `SUPABASE_SERVICE_ROLE_KEY=ci-placeholder` no ambiente do build e dos testes. Execute `npm run build`, instale o Chromium com `npx playwright install chromium` e rode `npm run test:e2e` com `E2E_AUTH_FIXTURE=true`. Deixe livres as portas 3000 e 54321.
+
 Os testes de banco exigem o Supabase local em execução:
 
 ```bash

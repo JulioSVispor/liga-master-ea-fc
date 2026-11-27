@@ -2,11 +2,11 @@
 
 ## Autenticação
 
-Supabase Auth mantém a sessão do browser. Login, registro e recuperação de senha são telas cliente. O trigger `handle_new_user` pretende inserir um perfil em `public.profiles` quando um usuário nasce em `auth.users`.
+O cliente `@supabase/ssr` mantém a sessão do navegador em cookies. O proxy e os layouts de `/dashboard` e `/admin` usam esses cookies para validar o usuário no Supabase. Login, registro e recuperação de senha são telas cliente. O trigger `handle_new_user` pretende inserir um perfil em `public.profiles` quando um usuário nasce em `auth.users`.
 
 ### Recuperação de senha
 
-`/forgot-password` envia um link com retorno para `/reset-password`. A tela de retorno só permite a alteração quando existe uma sessão de recuperação válida, aplica a política mínima de senha e encerra a sessão após a troca.
+`/forgot-password` envia um link com retorno para `/reset-password`. Abra o link no mesmo navegador em que fez a solicitação para que o cliente possa trocar o código PKCE pelo verificador guardado na origem. A tela só libera a alteração após validar que a sessão veio de recuperação, aplica a política mínima de senha e encerra a sessão após a troca. Se tiver um link do fluxo anterior com tokens no fragmento, solicite um novo.
 
 O Site URL e todos os domínios usados no desenvolvimento e em produção devem autorizar `/reset-password` em **Auth > URL Configuration > Redirect URLs**. Sem essa configuração, o Supabase redireciona para o Site URL padrão e o fluxo não chega à tela correta.
 
